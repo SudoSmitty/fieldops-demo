@@ -1,0 +1,11 @@
+[Unit]
+Description=FieldOps Copilot backend
+After=network.target oneagent.service
+[Service]
+WorkingDirectory=/opt/fieldops/backend
+Environment=AGENT_MODE=mock
+ExecStart=/usr/bin/node server.js
+Restart=always
+User=root
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+#cloud-config
+package_update: true
+packages: [nginx, git, curl]
+runcmd:
+  # --- Node.js 20 ---
+  - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  - apt-get install -y nodejs
+
+  # --- Dynatrace OneAgent (full-stack: host + deep code + logs + RUM injection) ---
+  - wget -O /tmp/oneagent.sh "${dt_url}/api/v1/deployment/installer/agent/unix/default/latest?arch=x86&flavor=default" --header="Authorization: Api-Token ${dt_token}"
+  - sh /tmp/oneagent.sh --set-app-log-content-access=true --set-host-group=fieldops-demo
+
+  # --- Deploy app: clone the repo Copilot builds from this plan (backend/ + frontend/index.html
+  #     are written verbatim from Sections 7 and 8). Replace <you> with the repo owner. ---
+  - git clone https://github.com/SudoSmitty/fieldops-demo.git /opt/fieldops || true
+  - cd /opt/fieldops/backend && npm install --omit=dev
+  - cp /opt/fieldops/backend/fieldops-backend.service /etc/systemd/system/
+  - systemctl daemon-reload && systemctl enable --now fieldops-backend
+
+  # --- Frontend + reverse proxy ---
+  - cp /opt/fieldops/frontend/index.html /var/www/html/index.html
+  - bash -c 'cat > /etc/nginx/sites-available/default <<EOF
+server {
+  listen 80 default_server;
+  root /var/www/html; index index.html;
+  location / { try_files \$uri /index.html; }
+  location /api/ {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;        # required so SSE streams through
+    proxy_read_timeout 300s;
+  }
+}
+EOF'
+  - systemctl restart nginx

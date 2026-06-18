@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FieldOps Copilot</title>
+<!-- RUM is auto-injected by Dynatrace OneAgent on the host. No OTLP/JS SDK here. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#15181E; --panel:#1E222A; --panel-2:#262B34; --line:#323844;
+    --amber:#FFB000; --amber-dim:rgba(255,176,0,.14); --cyan:#5BC8D6;
+    --text:#E8E6E1; --muted:#8A9099; --ok:#4BB377; --alert:#E5484D;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
+    --disp:"Saira",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--body);
+    font-size:15px;line-height:1.5;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  /* ---- top bar ---- */
+  header{display:flex;align-items:center;gap:14px;padding:14px 20px;
+    border-bottom:1px solid var(--line);background:linear-gradient(180deg,#1b1f27,#15181e)}
+  .logo{width:30px;height:30px;border-radius:6px;flex:none;position:relative;
+    background:radial-gradient(circle at 30% 30%,#3a4150,#22262e);border:1px solid var(--line)}
+  .logo::after{content:"";position:absolute;inset:9px;border-radius:50%;
+    background:var(--amber);box-shadow:0 0 10px var(--amber)}
+  .brand{font-family:var(--disp);font-weight:700;letter-spacing:.04em;font-size:18px}
+  .brand span{color:var(--amber)}
+  .sys{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted);
+    display:flex;align-items:center;gap:8px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  /* ---- layout ---- */
+  .wrap{flex:1;display:grid;grid-template-columns:248px 1fr;min-height:0}
+  aside{border-right:1px solid var(--line);padding:18px 16px;overflow:auto;background:#171b22}
+  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  .roles{display:flex;flex-direction:column;gap:6px;margin-bottom:24px}
+  .role{appearance:none;text-align:left;cursor:pointer;border:1px solid var(--line);
+    background:var(--panel);color:var(--text);padding:10px 12px;border-radius:8px;
+    font-family:var(--disp);font-weight:600;font-size:14px;letter-spacing:.02em;
+    display:flex;align-items:center;gap:10px;transition:border-color .15s,background .15s}
+  .role:hover{border-color:#46506180}
+  .role[aria-pressed="true"]{border-color:var(--amber);background:var(--amber-dim)}
+  .role .tag{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .chip{display:block;width:100%;text-align:left;cursor:pointer;margin-bottom:6px;
+    border:1px solid transparent;background:transparent;color:var(--muted);
+    padding:8px 10px;border-radius:7px;font-family:var(--body);font-size:13px;
+    transition:color .15s,background .15s,border-color .15s}
+  .chip:hover{color:var(--text);background:var(--panel);border-color:var(--line)}
+  /* ---- conversation ---- */
+  main{display:flex;flex-direction:column;min-height:0}
+  .stream{flex:1;overflow:auto;padding:26px 28px;scroll-behavior:smooth}
+  .turn{max-width:760px;margin:0 auto 26px}
+  .who{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .who::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--muted)}
+  .turn.user .bubble{background:var(--panel-2);border:1px solid var(--line);
+    border-radius:10px;padding:12px 15px}
+  .turn.user .who::before{background:var(--cyan)}
+  .turn.bot .who::before{background:var(--amber)}
+  .answer{font-size:16px;line-height:1.62}
+  /* ---- signature: diagnostic readout ---- */
+  .readout{border:1px solid var(--line);border-radius:10px;overflow:hidden;
+    margin:4px 0 14px;background:var(--panel)}
+  .readout-head{display:flex;align-items:center;gap:12px;padding:10px 14px;
+    border-bottom:1px solid var(--line);background:#1a1e26}
+  .stage{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--muted);
+    display:flex;align-items:center;gap:7px}
+  .stage .led{width:8px;height:8px;border-radius:50%;background:#3a4150;flex:none}
+  .stage.on{color:var(--text)}
+  .stage.on .led{background:var(--amber);box-shadow:0 0 9px var(--amber);animation:pulse 1.1s infinite}
+  .stage.done{color:var(--ok)}
+  .stage.done .led{background:var(--ok);box-shadow:none;animation:none}
+  .sep{flex:none;width:18px;height:1px;background:var(--line)}
+  .tool-name{margin-left:auto;font-family:var(--disp);font-weight:700;font-size:12px;
+    letter-spacing:.08em;color:var(--amber);text-transform:uppercase}
+  .readout-body{padding:0 14px;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s}
+  .readout-body.open{max-height:340px;padding:12px 14px}
+  .kv{font-family:var(--mono);font-size:12px;color:var(--muted);margin:0 0 8px}
+  .kv b{color:var(--text);font-weight:500}
+  pre.sql{font-family:var(--mono);font-size:12px;color:#cdd3db;background:#13161c;
+    border:1px solid var(--line);border-radius:7px;padding:10px 12px;margin:0;overflow:auto;
+    white-space:pre-wrap}
+  .think{font-size:14px;color:var(--muted);font-style:italic;border-left:2px solid var(--line);
+    padding-left:12px;margin:0 0 6px}
+  /* ---- data grid ---- */
+  table{border-collapse:collapse;width:100%;margin:12px 0 4px;font-size:13px}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+  th{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);font-weight:500}
+  td{font-family:var(--mono);font-size:13px}
+  tr:hover td{background:#1c2027}
+  .metric{color:var(--amber);font-weight:500}
+  /* ---- composer ---- */
+  .composer{border-top:1px solid var(--line);padding:16px 28px;background:#171b22}
+  .field{max-width:760px;margin:0 auto;display:flex;gap:10px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 16px;
+    transition:border-color .15s}
+  .field:focus-within{border-color:var(--amber)}
+  .field input{flex:1;background:none;border:none;color:var(--text);font-family:var(--body);
+    font-size:15px;outline:none}
+  .field input::placeholder{color:var(--muted)}
+  .send{appearance:none;border:none;cursor:pointer;background:var(--amber);color:#1a1205;
+    font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.04em;
+    padding:9px 18px;border-radius:7px;transition:filter .15s}
+  .send:hover{filter:brightness(1.08)}
+  .send:disabled{opacity:.5;cursor:default}
+  .hint{max-width:760px;margin:8px auto 0;font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .cursor{display:inline-block;width:8px;height:1.05em;background:var(--amber);
+    vertical-align:-2px;margin-left:1px;animation:blink 1s steps(2) infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes blink{0%{opacity:1}50%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto}}
+  @media (max-width:720px){.wrap{grid-template-columns:1fr}aside{display:none}}
+  :focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" aria-hidden="true"></div>
+  <div class="brand">FIELD<span>OPS</span> COPILOT</div>
+  <div class="sys"><span class="dot"></span>AGENT ONLINE &middot; <span id="mode">MOCK</span></div>
+</header>
+
+<div class="wrap">
+  <aside>
+    <p class="eyebrow">Shift role</p>
+    <div class="roles" id="roles">
+      <button class="role" data-role="technician" aria-pressed="true">
+        Technician <span class="tag">FIELD</span></button>
+      <button class="role" data-role="maintenance_manager" aria-pressed="false">
+        Maint. Manager <span class="tag">OPS</span></button>
+    </div>
+    <p class="eyebrow">Quick diagnostics</p>
+    <button class="chip">Show overdue work orders for pump stations</button>
+    <button class="chip">What is the quarterly maintenance procedure for pumps?</button>
+    <button class="chip">Which assets are due for service this week?</button>
+    <button class="chip">Open work orders by site</button>
+  </aside>
+
+  <main>
+    <div class="stream" id="stream">
+      <div class="turn bot">
+        <div class="who">Copilot</div>
+        <div class="answer">Ask about work orders, schedules, or asset procedures. Every
+          answer shows its work: planning, the tool the agent runs, the query it generates,
+          and the result &mdash; the same trace Dynatrace captures end to end.</div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="field">
+        <input id="q" autocomplete="off"
+          placeholder="Ask the field-service agent&hellip;" />
+        <button class="send" id="send">Run</button>
+      </div>
+      <div class="hint" id="hint">Trace starts in the browser &middot; OneAgent RUM &rarr; backend &rarr; agent tool calls</div>
+    </div>
+  </main>
+</div>
+
+<script>
+const stream = document.getElementById('stream');
+const input = document.getElementById('q');
+const send  = document.getElementById('send');
+let role = 'technician';
+
+document.getElementById('roles').addEventListener('click', e=>{
+  const b = e.target.closest('.role'); if(!b) return;
+  role = b.dataset.role;
+  [...document.querySelectorAll('.role')].forEach(r=>
+    r.setAttribute('aria-pressed', r===b));
+});
+document.querySelectorAll('.chip').forEach(c=>
+  c.addEventListener('click',()=>{input.value=c.textContent;ask();}));
+send.addEventListener('click', ask);
+input.addEventListener('keydown', e=>{if(e.key==='Enter') ask();});
+
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function scroll(){stream.scrollTop = stream.scrollHeight;}
+
+function addUser(text){
+  stream.appendChild(el(`<div class="turn user"><div class="who">${role.replace('_',' ')}</div>
+    <div class="bubble">${text}</div></div>`));
+  scroll();
+}
+
+function botTurn(){
+  const turn = el(`<div class="turn bot"><div class="who">Copilot</div>
+    <div class="readout">
+      <div class="readout-head">
+        <div class="stage" data-s="plan"><span class="led"></span>PLANNING</div>
+        <div class="sep"></div>
+        <div class="stage" data-s="tool"><span class="led"></span>TOOL</div>
+        <div class="sep"></div>
+        <div class="stage" data-s="result"><span class="led"></span>RESULT</div>
+        <div class="tool-name" data-name></div>
+      </div>
+      <div class="readout-body"></div>
+    </div>
+    <div class="answer"></div></div>`);
+  stream.appendChild(turn); scroll();
+  return {
+    turn,
+    stageEl: s=>turn.querySelector(`.stage[data-s="${s}"]`),
+    body: turn.querySelector('.readout-body'),
+    nameEl: turn.querySelector('[data-name]'),
+    answer: turn.querySelector('.answer'),
+  };
+}
+function setStage(ui,s,state){const e=ui.stageEl(s);e.classList.remove('on','done');e.classList.add(state);}
+
+// ---- SSE event handling (identical shape for mock + real Snowflake) ----
+function handleEvent(ui, ev, data){
+  switch(ev){
+    case 'response.status':
+      setStage(ui,'plan','on'); break;
+    case 'response.thinking':
+      setStage(ui,'plan','done');
+      ui.body.classList.add('open');
+      ui.body.appendChild(el(`<p class="think">${data.text||''}</p>`)); scroll(); break;
+    case 'response.tool_use':
+      setStage(ui,'tool','on');
+      ui.nameEl.textContent = (data.name||'').replace('_',' ');
+      ui.body.classList.add('open');
+      if(data.input&&data.input.query)
+        ui.body.appendChild(el(`<p class="kv">query &middot; <b>${data.input.query}</b></p>`));
+      scroll(); break;
+    case 'response.tool_result':
+      setStage(ui,'tool','done'); setStage(ui,'result','on');
+      const sql = data.result && data.result.sql;
+      if(sql) ui.body.appendChild(el(`<pre class="sql">${sql}</pre>`));
+      else ui.body.appendChild(el(`<p class="kv">knowledge hits &middot; <b>${(data.result||{}).hits||0}</b></p>`));
+      scroll(); break;
+    case 'response.table':
+      setStage(ui,'result','done');
+      const t = data.table; if(!t) break;
+      let h='<table><thead><tr>'+t.columns.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
+      h+=t.rows.map(r=>'<tr>'+r.map((v,i)=>i===0?`<td>${v}</td>`:`<td class="metric">${v}</td>`).join('')+'</tr>').join('');
+      ui.answer.parentNode.insertBefore(el(h+'</tbody></table>'), ui.answer); scroll(); break;
+    case 'response.text.delta':
+      setStage(ui,'result','done');
+      ui.answer.textContent += data.text||''; scroll(); break;
+    case 'response':
+      const c=ui.answer.querySelector('.cursor'); if(c) c.remove();
+      if(data.tokens_in!=null)
+        ui.body.appendChild(el(`<p class="kv" style="margin-top:8px">tokens &middot; <b>${data.tokens_in} in / ${data.tokens_out} out</b></p>`));
+      break;
+    case 'error':
+      ui.answer.textContent = 'Agent error: '+(data.message||'unknown'); break;
+  }
+}
+
+async function ask(){
+  const text = input.value.trim(); if(!text) return;
+  input.value=''; send.disabled=true;
+  addUser(text);
+  const ui = botTurn();
+  ui.answer.appendChild(el('<span class="cursor"></span>'));
+  try{
+    const resp = await fetch('/api/agent/run',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt:text,role})});
+    if(!resp.ok||!resp.body) throw new Error('backend');
+    await readSSE(resp.body, ui);
+  }catch(_){
+    // Standalone preview fallback so the UI demos without the backend.
+    await simulate(text, ui);
+  }
+  const c=ui.answer.querySelector('.cursor'); if(c) c.remove();
+  send.disabled=false; input.focus();
+}
+
+async function readSSE(body, ui){
+  const reader=body.getReader(), dec=new TextDecoder(); let buf='';
+  for(;;){
+    const {value,done}=await reader.read(); if(done) break;
+    buf+=dec.decode(value,{stream:true});
+    let i; while((i=buf.indexOf('\n\n'))>=0){
+      const block=buf.slice(0,i); buf=buf.slice(i+2);
+      let ev='message',data='';
+      block.split('\n').forEach(l=>{
+        if(l.startsWith('event:')) ev=l.slice(6).trim();
+        else if(l.startsWith('data:')) data+=l.slice(5).trim();
+      });
+      if(data) handleEvent(ui,ev,JSON.parse(data));
+    }
+  }
+}
+
+// ---- built-in simulator (mirrors backend mock event sequence) ----
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+async function simulate(prompt, ui){
+  const search = /\bhow\b|procedure|manual|maintenance|inspect/i.test(prompt);
+  await wait(300); handleEvent(ui,'response.status',{});
+  await wait(500); handleEvent(ui,'response.thinking',{text: search
+    ? "Knowledge question. I'll use Cortex Search over the asset manuals."
+    : "User wants work-order data. I'll query with Cortex Analyst, then summarize by site."});
+  await wait(400);
+  handleEvent(ui,'response.tool_use',{name: search?'cortex_search':'cortex_analyst',
+    input:{query:prompt}});
+  await wait(900);
+  if(search){
+    handleEvent(ui,'response.tool_result',{name:'cortex_search',result:{hits:4}});
+    await stream_text(ui,"Per the asset manual, the quarterly procedure for centrifugal pumps is: isolate, lock out, inspect seals, check vibration, log readings.");
+    handleEvent(ui,'response',{tokens_in:210,tokens_out:140});
+  }else{
+    handleEvent(ui,'response.tool_result',{name:'cortex_analyst',result:{sql:
+      "SELECT site, COUNT(*) AS overdue\nFROM work_orders\nWHERE status='OPEN' AND due_date < CURRENT_DATE\nGROUP BY site"}});
+    await wait(300);
+    handleEvent(ui,'response.table',{table:{columns:["site","overdue"],
+      rows:[["Pump Station 4",7],["Compressor Yard",3],["North Intake",2]]}});
+    await stream_text(ui,"There are 12 overdue work orders. Pump Station 4 has the most (7), followed by Compressor Yard (3) and North Intake (2).");
+    handleEvent(ui,'response',{tokens_in:180,tokens_out:90});
+  }
+}
+async function stream_text(ui,txt){
+  for(const part of txt.split('. ')){
+    handleEvent(ui,'response.text.delta',{text:part.endsWith('.')?part+' ':part+'. '});
+    await wait(120);
+  }
+}
+</script>
+</body>
+</html>
