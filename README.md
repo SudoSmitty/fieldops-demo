@@ -7,14 +7,16 @@ The full plan and rationale live in [docs/Cortex_Agent_Azure_OneAgent_Demo_Plan.
 ## Repo layout
 
 ```
-infra/      # Terraform — Azure VM, NSG, cloud-init (OneAgent + Node + Nginx)
+infra/      # Terraform — Azure VM, NSG, cloud-init
 backend/    # Node/Express + SSE; OTel tool spans; mock and Snowflake clients
-frontend/   # Static SPA (no telemetry SDK; OneAgent injects RUM)
+frontend/   # Static SPA with manual RUM tag (auto-injection fallback)
+scripts/    # up.sh / down.sh / deploy.sh — one-command bring-up/teardown
+dashboards/ # FieldOps observability dashboard (dtctl-managed)
 docs/       # The plan
 .github/    # Sub-agents, skills, repo instructions
 ```
 
-## Quick local check (mock mode)
+## Quick local check (mock mode, no Azure)
 
 ```bash
 cd backend && npm install --omit=dev
@@ -27,9 +29,35 @@ curl -N -X POST http://127.0.0.1:8000/api/agent/run \
 
 Open [frontend/index.html](frontend/index.html) directly in a browser — the built-in simulator runs offline if the backend isn't reachable.
 
-## Deploy
+## Deploy to Azure (one command)
 
-See plan section 10. **Do not `terraform apply` without supplying real values for `ssh_public_key`, `allowed_ip`, `dt_environment_url`, and `dt_paas_token`.**
+Prereqs: `terraform`, `az` (logged in via `az login`), `ssh`, `curl`, a Dynatrace PaaS token with scope `InstallerDownload`.
+
+```bash
+# Token only ever lives in your shell env — never in a file, never in chat.
+read -rs 'TF_VAR_dt_paas_token?Paste PaaS token: ' && export TF_VAR_dt_paas_token
+./scripts/up.sh
+```
+
+What [scripts/up.sh](scripts/up.sh) does:
+1. Verifies prereqs and Azure login.
+2. Generates `~/.ssh/fieldops_rsa` if missing (azurerm rejects ed25519).
+3. Auto-syncs your current public IP into `infra/terraform.tfvars`.
+4. `terraform apply` — creates RG, VNet, NSG, public IP, VM.
+5. SSHes in and runs [scripts/deploy.sh](scripts/deploy.sh) — installs OneAgent, Node 20, Nginx, clones the app, starts the systemd service. Idempotent.
+6. Smoke test: confirms 200 on the frontend and an SSE stream from the backend.
+7. Prints the URL, SSH command, and dashboard link.
+
+Total time: ~5 minutes.
+
+```bash
+./scripts/down.sh   # tears down all Azure resources when you're done
+```
+
+`down.sh` removes the resource group (and everything in it). Dynatrace tenant resources (dashboard, web application) survive across up/down cycles — see comments in the script for manual cleanup if needed.
+
+### Why cloud-init isn't the deploy path
+The plan's Section 6 uses cloud-init for deploy. In practice on Sprint with the canonical Ubuntu image we saw cloud-init's `runcmd` partially execute (typically the first `apt` step ran and subsequent steps didn't), leaving the VM bare. `scripts/deploy.sh` runs the same logic over SSH and is idempotent, so it's the reliable path. cloud-init remains in `infra/cloud-init.yaml` as the documented intent but the SSH script is what guarantees the state.
 
 ## After the customer is sold — Snowflake-side observability follow-up
 
