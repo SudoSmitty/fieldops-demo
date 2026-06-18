@@ -23,7 +23,11 @@ app.post('/api/agent/run', async (req, res) => {
 
   // Root agent span (child of the Express server span OneAgent already created)
   const root = tracer.startSpan('agent.run', { kind: SpanKind.SERVER });
+  // OTel GenAI conventions — required for Dynatrace AI Observability app to surface
   root.setAttribute('gen_ai.system','snowflake.cortex');
+  root.setAttribute('gen_ai.operation.name','chat');
+  root.setAttribute('gen_ai.request.model','claude-4-sonnet');
+  root.setAttribute('gen_ai.response.model','claude-4-sonnet');
   root.setAttribute('user.role', role);
   root.setAttribute('snowflake.request_id', requestId);   // join key for later
   root.setAttribute('gen_ai.prompt', prompt);
@@ -36,6 +40,8 @@ app.post('/api/agent/run', async (req, res) => {
     for await (const ev of client().run([{ role:'user', content: prompt }])) {
       if (ev.event === EVENTS.TOOL_USE) {
         const span = tracer.startSpan(`tool.${ev.data.name}`, { kind: SpanKind.SERVER }, ctx);
+        span.setAttribute('gen_ai.system','snowflake.cortex');
+        span.setAttribute('gen_ai.operation.name','execute_tool');
         span.setAttribute('gen_ai.tool.name', ev.data.name);
         if (ev.data.input?.query) span.setAttribute('gen_ai.tool.query', ev.data.input.query);
         openTools.set(ev.data.name, span);

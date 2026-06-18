@@ -1,0 +1,152 @@
+{
+  "id": "7105baa7-5608-465e-874e-69c1ae0781e2",
+  "name": "FieldOps Cortex Agent — Observability",
+  "type": "dashboard",
+  "content": {
+    "version": 21,
+    "variables": [],
+    "tiles": {
+      "0": {
+        "type": "markdown",
+        "content": "# FieldOps Cortex Agent — Observability\n\nAgent spans (`agent.run`, `tool.*`) emitted by the Node backend and captured by OneAgent. Use the time-picker (top right) to adjust the window."
+      },
+      "1": {
+        "type": "data",
+        "title": "Agent requests by role",
+        "query": "fetch spans | filter span.name == \"agent.run\" | makeTimeseries c = count(), by:{user.role}",
+        "visualization": "lineChart",
+        "visualizationSettings": {
+          "dataMapping": { "time": "timeframe", "displayedFields": ["user.role"], "series": ["c"], "interval": "interval" },
+          "axes": {
+            "xAxis": { "label": "", "showLabel": false, "displayTimeFrame": "auto" },
+            "yAxis": { "label": "requests", "min": {"mode": "auto"}, "max": {"mode": "auto"}, "scale": "linear", "showLabel": true }
+          },
+          "seriesConfig": { "curve": "linear", "pointsDisplay": "auto", "gapPolicy": "gap" },
+          "colorModeType": { "colorPalette": "categorical", "seriesCustomColors": [] }
+        },
+        "querySettings": {}
+      },
+      "2": {
+        "type": "data",
+        "title": "Agent answer latency p50 / p90 / p99",
+        "query": "fetch spans | filter span.name == \"agent.run\" | makeTimeseries {p50 = percentile(duration, 50), p90 = percentile(duration, 90), p99 = percentile(duration, 99)}",
+        "visualization": "lineChart",
+        "visualizationSettings": {
+          "dataMapping": { "time": "timeframe", "displayedFields": [], "series": ["p50", "p90", "p99"], "interval": "interval" },
+          "axes": {
+            "xAxis": { "label": "", "showLabel": false, "displayTimeFrame": "auto" },
+            "yAxis": { "label": "duration", "min": {"mode": "auto"}, "max": {"mode": "auto"}, "scale": "linear", "showLabel": true }
+          },
+          "unitsOverrides": [
+            { "identifier": "p50", "unitCategory": "time", "baseUnit": "nanosecond", "displayUnit": null, "decimals": null, "suffix": "", "delimiter": false },
+            { "identifier": "p90", "unitCategory": "time", "baseUnit": "nanosecond", "displayUnit": null, "decimals": null, "suffix": "", "delimiter": false },
+            { "identifier": "p99", "unitCategory": "time", "baseUnit": "nanosecond", "displayUnit": null, "decimals": null, "suffix": "", "delimiter": false }
+          ],
+          "seriesConfig": { "curve": "linear", "pointsDisplay": "auto", "gapPolicy": "gap" },
+          "colorModeType": { "colorPalette": "categorical", "seriesCustomColors": [] }
+        },
+        "querySettings": {}
+      },
+      "3": {
+        "type": "data",
+        "title": "Tool duration & call count by tool",
+        "query": "fetch spans | filter startsWith(span.name, \"tool.\") | summarize {p50 = percentile(duration, 50), p95 = percentile(duration, 95), calls = count()}, by:{span.name}",
+        "visualization": "categoricalBarChart",
+        "visualizationSettings": {
+          "categoryAxis": { "label": {"label": "tool", "showLabel": true}, "tickLayout": "horizontal" },
+          "numericAxis": { "label": {"showLabel": true, "label": "duration / calls"}, "scale": "linear" },
+          "dataMapping": { "displayedFields": ["span.name"], "values": ["p50", "p95", "calls"] },
+          "valueSettings": { "valueRepresentation": "absolute" },
+          "layout": { "groupMode": "grouped", "position": "horizontal" },
+          "colorModeType": { "colorCategoryMode": "multi-color", "colorPalette": "categorical", "customCategoryColors": {} }
+        },
+        "querySettings": {}
+      },
+      "4": {
+        "type": "data",
+        "title": "Tokens in vs out by role",
+        "query": "fetch spans | filter span.name == \"agent.run\" | summarize {tokens_in = sum(gen_ai.usage.input_tokens), tokens_out = sum(gen_ai.usage.output_tokens)}, by:{user.role}",
+        "visualization": "categoricalBarChart",
+        "visualizationSettings": {
+          "categoryAxis": { "label": {"label": "role", "showLabel": true}, "tickLayout": "horizontal" },
+          "numericAxis": { "label": {"showLabel": true, "label": "tokens"}, "scale": "linear" },
+          "dataMapping": { "displayedFields": ["user.role"], "values": ["tokens_in", "tokens_out"] },
+          "valueSettings": { "valueRepresentation": "absolute" },
+          "layout": { "groupMode": "grouped", "position": "horizontal" },
+          "colorModeType": { "colorCategoryMode": "multi-color", "colorPalette": "categorical", "customCategoryColors": {} }
+        },
+        "querySettings": {}
+      },
+      "5": {
+        "type": "data",
+        "title": "Host CPU usage",
+        "query": "timeseries cpu = avg(dt.host.cpu.usage), by:{dt.entity.host}",
+        "visualization": "lineChart",
+        "visualizationSettings": {
+          "dataMapping": { "time": "timeframe", "displayedFields": ["dt.entity.host"], "series": ["cpu"], "interval": "interval" },
+          "axes": {
+            "xAxis": { "label": "", "showLabel": false, "displayTimeFrame": "auto" },
+            "yAxis": { "label": "CPU %", "min": {"mode": "auto"}, "max": {"mode": "auto"}, "scale": "linear", "showLabel": true }
+          },
+          "unitsOverrides": [
+            { "identifier": "cpu", "unitCategory": "percent", "baseUnit": "percent", "displayUnit": null, "decimals": 1, "suffix": "", "delimiter": false }
+          ],
+          "seriesConfig": { "curve": "linear", "pointsDisplay": "auto", "gapPolicy": "gap" },
+          "colorModeType": { "colorPalette": "categorical", "seriesCustomColors": [] }
+        },
+        "querySettings": {}
+      },
+      "6": {
+        "type": "data",
+        "title": "Recent agent.run requests",
+        "query": "fetch spans | filter span.name == \"agent.run\" | sort start_time desc | fields start_time, user.role, snowflake.request_id, gen_ai.usage.input_tokens, gen_ai.usage.output_tokens, duration | limit 25",
+        "visualization": "table",
+        "visualizationSettings": {
+          "table": {
+            "colorThresholdTarget": "value",
+            "columnOrder": ["start_time", "user.role", "snowflake.request_id", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "duration"],
+            "hiddenColumns": [],
+            "rowDensity": "condensed",
+            "sortBy": [],
+            "columnWidthStrategy": "content",
+            "enableSparklines": false,
+            "linewrapEnabled": false
+          }
+        },
+        "querySettings": {}
+      },
+      "7": {
+        "type": "data",
+        "title": "Agent / tool log lines",
+        "query": "fetch logs | filter contains(content, \"tool invoked\") or contains(content, \"agent request\") | sort timestamp desc | fields timestamp, loglevel, content | limit 30",
+        "visualization": "table",
+        "visualizationSettings": {
+          "table": {
+            "colorThresholdTarget": "value",
+            "columnOrder": ["timestamp", "loglevel", "content"],
+            "hiddenColumns": [],
+            "rowDensity": "condensed",
+            "sortBy": [],
+            "columnWidthStrategy": "content",
+            "enableSparklines": false,
+            "linewrapEnabled": true
+          }
+        },
+        "querySettings": {}
+      }
+    },
+    "layouts": {
+      "0": { "x": 0,  "y": 0,  "w": 24, "h": 1 },
+      "1": { "x": 0,  "y": 1,  "w": 12, "h": 8 },
+      "2": { "x": 12, "y": 1,  "w": 12, "h": 8 },
+      "3": { "x": 0,  "y": 9,  "w": 12, "h": 8 },
+      "4": { "x": 12, "y": 9,  "w": 12, "h": 8 },
+      "5": { "x": 0,  "y": 17, "w": 24, "h": 6 },
+      "6": { "x": 0,  "y": 23, "w": 24, "h": 10 },
+      "7": { "x": 0,  "y": 33, "w": 24, "h": 8 }
+    },
+    "settings": {
+      "gridLayout": { "columnsCount": 24 }
+    }
+  }
+}
