@@ -98,19 +98,19 @@
       },
       "6": {
         "type": "data",
-        "title": "Recent agent.run requests",
-        "query": "fetch spans | filter span.name == \"agent.run\" | sort start_time desc | fields start_time, user.role, snowflake.request_id, gen_ai.usage.input_tokens, gen_ai.usage.output_tokens, duration | limit 25",
+        "title": "Recent conversations (prompt + completion)",
+        "query": "fetch spans, from:-1h | filter span.name == \"agent.run\" | sort start_time desc | fields start_time, user.role, gen_ai.prompt, gen_ai.completion, gen_ai.usage.input_tokens, gen_ai.usage.output_tokens, snowflake.request_id | limit 25",
         "visualization": "table",
         "visualizationSettings": {
           "table": {
             "colorThresholdTarget": "value",
-            "columnOrder": ["start_time", "user.role", "snowflake.request_id", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "duration"],
+            "columnOrder": ["start_time", "user.role", "gen_ai.prompt", "gen_ai.completion", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "snowflake.request_id"],
             "hiddenColumns": [],
-            "rowDensity": "condensed",
+            "rowDensity": "comfortable",
             "sortBy": [],
-            "columnWidthStrategy": "content",
+            "columnWidthStrategy": "auto",
             "enableSparklines": false,
-            "linewrapEnabled": false
+            "linewrapEnabled": true
           }
         },
         "querySettings": {}
@@ -142,8 +142,8 @@
       "3": { "x": 0,  "y": 9,  "w": 12, "h": 8 },
       "4": { "x": 12, "y": 9,  "w": 12, "h": 8 },
       "5": { "x": 0,  "y": 17, "w": 24, "h": 6 },
-      "6": { "x": 0,  "y": 23, "w": 24, "h": 10 },
-      "7": { "x": 0,  "y": 33, "w": 24, "h": 8 }
+      "6": { "x": 0,  "y": 23, "w": 24, "h": 14 },
+      "7": { "x": 0,  "y": 37, "w": 24, "h": 8 }
     },
     "settings": {
       "gridLayout": { "columnsCount": 24 }
