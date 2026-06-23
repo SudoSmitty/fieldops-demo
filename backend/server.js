@@ -9,8 +9,16 @@ import { EVENTS } from './agent/base.js';
 const tracer = trace.getTracer('fieldops-copilot');
 const app = express();
 app.use(express.json());
-const log = (lvl, msg, extra={}) =>
-  console.log(JSON.stringify({ level:lvl, msg, ts:new Date().toISOString(), ...extra }));
+// Emit logs with the active trace/span context so OneAgent links them to the
+// AI Observability Logs tab (and to the span in the trace UI).
+const log = (lvl, msg, extra={}) => {
+  const sc = trace.getActiveSpan()?.spanContext();
+  console.log(JSON.stringify({
+    level:lvl, msg, ts:new Date().toISOString(),
+    'trace.id': sc?.traceId, 'span.id': sc?.spanId,
+    ...extra
+  }));
+};
 const client = () =>
   process.env.AGENT_MODE === 'snowflake' ? new SnowflakeCortexClient() : new MockCortexClient();
 
@@ -31,11 +39,17 @@ app.post('/api/agent/run', async (req, res) => {
   root.setAttribute('user.role', role);
   root.setAttribute('snowflake.request_id', requestId);   // join key for later
   root.setAttribute('gen_ai.prompt', prompt);
-  log('info','agent request', { requestId, role });
-
+  // OTel GenAI semantic-convention span events. Dynatrace AI Observability's
+  // "Prompt trace" panel reads input/output from these events, not from the
+  // gen_ai.prompt/completion attributes (those feed DQL + the token chart only).
+  root.addEvent('gen_ai.user.message', { content: prompt, role: 'user' });
   const ctx = trace.setSpan(context.active(), root);
   const openTools = new Map();
   let completion = '';
+  // Run the entire request inside the root span's context so every log() call
+  // — including tool-invoked/tool-result lines — picks up trace.id/span.id.
+  await context.with(ctx, async () => {
+  log('info','agent request', { requestId, role });
   try {
     for await (const ev of client().run([{ role:'user', content: prompt }])) {
       if (ev.event === EVENTS.TOOL_USE) {
@@ -59,6 +73,13 @@ app.post('/api/agent/run', async (req, res) => {
         root.setAttribute('gen_ai.usage.output_tokens', ev.data.tokens_out ?? 0);
         root.setAttribute('gen_ai.completion', completion);
         root.setAttribute('gen_ai.response_id', requestId);
+        // OTel GenAI assistant response — the AI Obs Prompt trace panel renders
+        // this as "Prompt output".
+        root.addEvent('gen_ai.choice', {
+          'finish_reason': 'stop',
+          'index': 0,
+          'message': JSON.stringify({ role: 'assistant', content: completion })
+        });
       } else if (ev.event === EVENTS.ERROR) {
         root.setAttribute('error', true); log('error','agent error', { requestId, ...ev.data });
       }
@@ -70,6 +91,7 @@ app.post('/api/agent/run', async (req, res) => {
     for (const s of openTools.values()) s.end();
     root.end(); res.end();
   }
+  });
 });
 
 app.listen(8000, () => log('info','backend listening', { port: 8000 }));
