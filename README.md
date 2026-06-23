@@ -29,6 +29,45 @@ curl -N -X POST http://127.0.0.1:8000/api/agent/run \
 
 Open [frontend/index.html](frontend/index.html) directly in a browser — the built-in simulator runs offline if the backend isn't reachable.
 
+## How Dynatrace knows this is a GenAI service
+
+Dynatrace does **not** sniff outbound traffic and recognize `*.snowflakecomputing.com` as "Snowflake Cortex". It does not pattern-match URLs, ports, or payloads. The classification is **100% driven by OpenTelemetry GenAI semantic-convention attributes that the backend code puts on the spans.**
+
+The browser doesn't make the Cortex call — it POSTs to `/api/agent/run`, and the Node backend makes the outbound HTTPS call. So Dynatrace's GenAI detection happens on the **backend service**, not in the browser.
+
+```mermaid
+flowchart LR
+  A[Browser POST<br>/api/agent/run] -->|HTTPS| B[Node backend]
+  B -->|HTTPS| C[Cortex API]
+  B -.emits.-> S["OTel span<br>name: agent.run<br>attrs: gen_ai.system=snowflake.cortex<br>gen_ai.operation.name=chat<br>gen_ai.request.model=claude-4-sonnet<br>gen_ai.response.model=claude-4-sonnet"]
+  S -.captured by.-> O[OneAgent Node OTel sensor]
+  O -.ships to.-> G[Dynatrace Grail]
+  G -->|detects gen_ai.* attrs| SS[Smartscape GenAI entities<br>dt.smartscape.gen_ai.model<br>dt.smartscape.gen_ai.provider<br>dt.smartscape.gen_ai.service]
+  SS --> AIO[AI Observability app<br>lights up the service]
+```
+
+The four trigger attributes on any span emitted by the service:
+
+| Attribute | Our value | What it tells Dynatrace |
+|---|---|---|
+| `gen_ai.system` | `snowflake.cortex` | The provider/system |
+| `gen_ai.operation.name` | `chat` | Chat-style LLM operation (vs `embeddings`, `completion`) |
+| `gen_ai.request.model` | `claude-4-sonnet` | Which model was requested |
+| `gen_ai.response.model` | `claude-4-sonnet` | Which model actually responded |
+
+When the ingest pipeline sees these on a span, it derives the three Smartscape GenAI entities (model, provider, service) and links them to the parent `dt.entity.service`. The AI Observability app queries by those entities — that's why `fieldops-backend` shows up in its AI Services list with `claude-4-sonnet` as a model version.
+
+The "Prompt trace" panel additionally reads OTel **span events** (`gen_ai.user.message`, `gen_ai.choice`) for the input/output columns. Attribute-based `gen_ai.prompt` / `gen_ai.completion` feed DQL and the token chart, but the panel itself uses events per the OTel GenAI semantic conventions.
+
+### Why we set the attrs manually
+
+Two paths exist for getting `gen_ai.*` onto spans:
+
+1. **SDK auto-instrumentation** — the official OpenAI / Anthropic / LangChain / LiteLLM OTel instrumentations emit `gen_ai.*` automatically. OneAgent's Node sensor inherits these without extra work.
+2. **Manual instrumentation** — when a provider has no first-class OTel SDK (Cortex Agents is a plain REST endpoint today), wrap the call in a span yourself and set the attributes. That's what [backend/server.js](backend/server.js) does.
+
+Either path produces identical telemetry. The semantic conventions are the contract — Cortex, OpenAI, Bedrock, Vertex, custom-hosted Llama: the AI Observability wiring is provider-agnostic.
+
 ## Deploy to Azure (one command)
 
 Prereqs: `terraform`, `az` (logged in via `az login`), `ssh`, `curl`, a Dynatrace PaaS token with scope `InstallerDownload`.
