@@ -40,6 +40,9 @@ for bin in terraform az ssh-keygen ssh curl; do
   command -v "$bin" >/dev/null || die "missing: $bin"
 done
 az account show >/dev/null 2>&1 || die "az not logged in; run 'az login'"
+# Probe an ARM token explicitly — catches MFA-expired sessions before terraform does.
+az account get-access-token --resource https://management.azure.com/ --query expiresOn -o tsv >/dev/null 2>&1 \
+  || die "Azure session expired (MFA refresh required); run 'az login' and re-run this script"
 echo "all prereqs present"
 
 banner "3. SSH key"
