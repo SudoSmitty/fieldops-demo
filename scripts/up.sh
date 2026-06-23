@@ -26,13 +26,6 @@ banner() { printf '\n\033[1;36m== %s ==\033[0m\n' "$*"; }
 warn()   { printf '\033[1;33mWARN: %s\033[0m\n' "$*" >&2; }
 die()    { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
-banner "0. prereqs"
-for bin in terraform az ssh-keygen ssh curl; do
-  command -v "$bin" >/dev/null || die "missing: $bin"
-done
-az account show >/dev/null 2>&1 || die "az not logged in; run 'az login'"
-echo "all prereqs present"
-
 banner "1. PaaS token"
 if [ -z "${TF_VAR_dt_paas_token:-}" ]; then
   read -rs -p 'Paste Dynatrace PaaS token (scope InstallerDownload): ' TF_VAR_dt_paas_token
@@ -42,7 +35,14 @@ fi
 [ -n "$TF_VAR_dt_paas_token" ] || die "no token"
 echo "token set in env"
 
-banner "2. SSH key"
+banner "2. prereqs"
+for bin in terraform az ssh-keygen ssh curl; do
+  command -v "$bin" >/dev/null || die "missing: $bin"
+done
+az account show >/dev/null 2>&1 || die "az not logged in; run 'az login'"
+echo "all prereqs present"
+
+banner "3. SSH key"
 if [ ! -f "$KEY" ]; then
   ssh-keygen -t rsa -b 4096 -f "$KEY" -N "" -C "fieldops-demo" -q
   echo "generated $KEY"
@@ -51,7 +51,7 @@ else
 fi
 PUBKEY="$(cat "$KEY.pub")"
 
-banner "3. tfvars"
+banner "4. tfvars"
 [ -f "$TFVARS" ] || die "$TFVARS not found; create it from README example"
 CUR_IP="$(curl -fsS ifconfig.me)/32"
 sed -i.bak "s|^allowed_ip[[:space:]]*=.*|allowed_ip         = \"$CUR_IP\"|" "$TFVARS"
@@ -59,7 +59,7 @@ sed -i.bak "s|^ssh_public_key[[:space:]]*=.*|ssh_public_key     = \"$PUBKEY\"|" 
 rm -f "$TFVARS.bak"
 echo "tfvars synced: allowed_ip=$CUR_IP, ssh_public_key=$KEY.pub"
 
-banner "4. terraform apply"
+banner "5. terraform apply"
 cd "$INFRA"
 terraform init -input=false -upgrade >/dev/null
 terraform apply -auto-approve -input=false
@@ -68,7 +68,7 @@ PUBIP="$(terraform output -raw public_ip)"
 URL="$(terraform output -raw url)"
 echo "VM up at $URL  ($PUBIP)"
 
-banner "5. wait for SSH"
+banner "6. wait for SSH"
 for i in {1..60}; do
   ssh -i "$KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=3 \
       azureuser@"$PUBIP" 'true' 2>/dev/null && break
@@ -76,12 +76,12 @@ for i in {1..60}; do
 done
 echo " ssh up"
 
-banner "6. run deploy.sh on VM"
+banner "7. run deploy.sh on VM"
 ssh -i "$KEY" azureuser@"$PUBIP" \
     "sudo DT_URL='https://yuf3378h.sprint.dynatracelabs.com' DT_TOKEN='$TF_VAR_dt_paas_token' bash -s" \
     < "$ROOT/scripts/deploy.sh"
 
-banner "7. smoke test"
+banner "8. smoke test"
 sleep 2
 CODE="$(curl -sS -o /dev/null -w '%{http_code}' "http://$PUBIP/")"
 [ "$CODE" = "200" ] || die "frontend returned HTTP $CODE"
