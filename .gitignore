@@ -1,8 +1,9 @@
-# Node
-backend/node_modules/
-backend/npm-debug.log*
-backend/yarn-debug.log*
-backend/yarn-error.log*
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
 
 # Terraform
 infra/.terraform/

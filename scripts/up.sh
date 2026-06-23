@@ -2,19 +2,23 @@
 # scripts/up.sh — bring up the FieldOps demo end-to-end.
 #
 # Usage:
-#   export TF_VAR_dt_paas_token='dt0c01....'   # or you'll be prompted
+#   export TF_VAR_dt_paas_token='dt0c01....'   # PaaS token (InstallerDownload)
+#   export DT_API_TOKEN='dt0c01....'           # API token (openTelemetryTrace.ingest)
+#   export DT_OTLP_ENDPOINT='https://<env>.live.dynatrace.com/api/v2/otlp'
 #   ./scripts/up.sh
+#
+# (Any token not in env is prompted for at runtime — never written to disk.)
 #
 # What this does (idempotent — safe to re-run):
 #   1. Verify prereqs (terraform, az, ssh-keygen, ssh, curl)
 #   2. Generate ~/.ssh/fieldops_rsa if missing (azurerm rejects ed25519)
 #   3. Refresh allowed_ip in terraform.tfvars to your current public IP
 #   4. terraform apply  (creates RG, VNet, NSG, public IP, VM)
-#   5. SSH to the VM and run scripts/deploy.sh (installs OneAgent, Node, Nginx, app)
+#   5. SSH to the VM and run scripts/deploy.sh (installs OneAgent, Python, Nginx, app)
 #   6. Smoke test: curl the public URL, confirm SSE event stream
 #
-# Token security: the PaaS token is only ever set in your shell env.
-# It never lands in tfvars, never on disk, never in chat.
+# Token security: tokens are only ever set in your shell env.
+# They never land in tfvars, never on disk, never in chat.
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,14 +30,25 @@ banner() { printf '\n\033[1;36m== %s ==\033[0m\n' "$*"; }
 warn()   { printf '\033[1;33mWARN: %s\033[0m\n' "$*" >&2; }
 die()    { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
-banner "1. PaaS token"
+banner "1. tokens"
 if [ -z "${TF_VAR_dt_paas_token:-}" ]; then
-  read -rs -p 'Paste Dynatrace PaaS token (scope InstallerDownload): ' TF_VAR_dt_paas_token
+  read -rs -p 'Paste Dynatrace PaaS token (scope InstallerDownload, for OneAgent install): ' TF_VAR_dt_paas_token
   echo
   export TF_VAR_dt_paas_token
 fi
-[ -n "$TF_VAR_dt_paas_token" ] || die "no token"
-echo "token set in env"
+[ -n "$TF_VAR_dt_paas_token" ] || die "no PaaS token"
+if [ -z "${DT_API_TOKEN:-}" ]; then
+  read -rs -p 'Paste Dynatrace API token (scope openTelemetryTrace.ingest, for AI Obs OTLP): ' DT_API_TOKEN
+  echo
+  export DT_API_TOKEN
+fi
+[ -n "$DT_API_TOKEN" ] || die "no API token"
+if [ -z "${DT_OTLP_ENDPOINT:-}" ]; then
+  read -p 'OTLP tenant endpoint (e.g. https://yuf3378h.live.dynatrace.com/api/v2/otlp): ' DT_OTLP_ENDPOINT
+  export DT_OTLP_ENDPOINT
+fi
+[ -n "$DT_OTLP_ENDPOINT" ] || die "no OTLP endpoint"
+echo "tokens + OTLP endpoint set in env"
 
 banner "2. prereqs"
 for bin in terraform az ssh-keygen ssh curl; do
@@ -81,7 +96,11 @@ echo " ssh up"
 
 banner "7. run deploy.sh on VM"
 ssh -i "$KEY" azureuser@"$PUBIP" \
-    "sudo DT_URL='https://yuf3378h.sprint.dynatracelabs.com' DT_TOKEN='$TF_VAR_dt_paas_token' bash -s" \
+    "sudo DT_URL='https://yuf3378h.sprint.dynatracelabs.com' \
+          DT_TOKEN='$TF_VAR_dt_paas_token' \
+          DT_OTLP_ENDPOINT='$DT_OTLP_ENDPOINT' \
+          DT_API_TOKEN='$DT_API_TOKEN' \
+          bash -s" \
     < "$ROOT/scripts/deploy.sh"
 
 banner "8. smoke test"

@@ -1,0 +1,10 @@
+fastapi==0.115.4
+uvicorn[standard]==0.32.0
+sse-starlette==2.1.3
+httpx==0.27.2
+httpx-sse==0.4.0
+pydantic==2.9.2
+# Traceloop + OTel: AI Observability path. Traceloop reuses opentelemetry-sdk
+# under the hood and pins compatible versions, so do not over-constrain otel here.
+traceloop-sdk==0.30.1
+opentelemetry-exporter-otlp-proto-http==1.27.0

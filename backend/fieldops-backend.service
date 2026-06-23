@@ -3,8 +3,8 @@ Description=FieldOps Copilot backend
 After=network.target oneagent.service
 [Service]
 WorkingDirectory=/opt/fieldops/backend
-Environment=AGENT_MODE=mock
-ExecStart=/usr/bin/node server.js
+EnvironmentFile=/etc/fieldops/backend.env
+ExecStart=/opt/fieldops/backend/.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
 Restart=always
 User=root
 [Install]
