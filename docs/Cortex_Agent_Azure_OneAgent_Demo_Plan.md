@@ -1,5 +1,28 @@
 # FieldOps Copilot — Azure + Full-Stack OneAgent Demo Plan
 
+> **⚠️ STATUS — historical MVP plan.** This document describes the original
+> Node-based, all-OneAgent architecture. The repo has since evolved to:
+>
+> - **Python (FastAPI + sse-starlette)** instead of Node/Express.
+> - **OpenLLMetry (Traceloop) → OTLP** for the AI / `gen_ai.*` telemetry,
+>   alongside OneAgent which still handles host / Nginx / RUM / logs.
+> - **OneAgent excluded from the uvicorn process group** (`DT_INJECT=false`
+>   plus `builtin:process-group.monitoring.state = MONITORING_OFF`) so we
+>   don't get a duplicate `fieldops-backend` service entity in the AI Obs app.
+>
+> Anything in this document referring to Node, custom OTel sensor capture by
+> OneAgent, or "no OTLP exporter" reflects the original intent — **not the
+> current deployment**.
+>
+> For the current state, see [the project README](../README.md).
+> For the roadmap to a customer-shaped complete demo, see
+> [Cortex_Agent_Complete_Demo_Plan.md](Cortex_Agent_Complete_Demo_Plan.md).
+>
+> The rationale, sub-agent definitions, dashboard tile design, and operator
+> talk-track below remain useful reference material and are preserved as-is.
+
+---
+
 End-to-end observability demo for a field-service AI agent, provisioned on **Azure with Terraform**, instrumented entirely by **full-stack Dynatrace OneAgent** (no OTLP pipeline to manage), with a polished frontend and a **dtctl**-managed dashboard in your **Sprint** tenant.
 
 The agent layer is a swappable mock today that emits the exact Cortex Agents SSE event shapes, so pointing it at a real Snowflake Cortex Agent later is a one-file change.

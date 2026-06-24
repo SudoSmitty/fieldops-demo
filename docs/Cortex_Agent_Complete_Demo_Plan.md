@@ -73,6 +73,10 @@ Demo against a real Cortex Agent with real prompts, real model latency, and real
    CORTEX_SCHEMA=AGENTS
    CORTEX_AGENT=FIELDOPS_AGENT
    CORTEX_PAT=<PAT>
+   # Optional: pin a specific model. If unset, the agent's own configuration
+   # in Snowflake decides which model to call. Either way, `gen_ai.response.model`
+   # on the span is overridden by whatever model Cortex reports it used.
+   CORTEX_MODEL=claude-3-5-sonnet
    ```
 3. `systemctl restart fieldops-backend`.
 
@@ -133,14 +137,15 @@ Make the FieldOps app trace and the DSOA-pulled Snowflake warehouse spans joinab
 - It is NOT yet passed to Cortex on the `:run` call. ❌
 
 ### Change
-In `backend/agent/snowflake_client.py`, add the request ID to the POST body:
+In `backend/agent/snowflake_client.py`, add the request ID to the POST body alongside the existing (env-conditional) `model` field:
 
 ```python
-body = {
-    "model": "claude-4-sonnet",
-    "messages": messages,
-    "request_id": request_id,   # pass through from server.py
-}
+body = {"messages": messages}
+cortex_model = os.environ.get("CORTEX_MODEL")
+if cortex_model:
+    body["model"] = cortex_model
+if request_id:
+    body["request_id"] = request_id   # pass through from server.py
 ```
 
 This requires `server.py` to pass the request UUID into `_client().run(...)`, so update the signature:
