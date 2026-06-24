@@ -118,7 +118,7 @@
       "7": {
         "type": "data",
         "title": "Agent / tool log lines (OTLP)",
-        "query": "fetch logs | filter dt.service.name == \"fieldops-backend\" and (contains(content, \"tool invoked\") or contains(content, \"agent request\") or contains(content, \"tool result\")) | sort timestamp desc | fields timestamp, loglevel, content, trace_id | limit 30",
+        "query": "fetch logs | filter service.name == \"fieldops-backend\" and (contains(content, \"tool invoked\") or contains(content, \"agent request\") or contains(content, \"tool result\")) | sort timestamp desc | fields timestamp, loglevel, content, trace_id | limit 30",
         "visualization": "table",
         "visualizationSettings": {
           "table": {
