@@ -8,3 +8,7 @@ pydantic==2.9.2
 # under the hood and pins compatible versions, so do not over-constrain otel here.
 traceloop-sdk==0.30.1
 opentelemetry-exporter-otlp-proto-http==1.27.0
+# FastAPI HTTP server span auto-instrumentation. Without this, agent.run has
+# no inbound HTTP parent, the OneAgent nginx span can't stitch to it, and
+# Dynatrace's Trace UI shows separate disconnected requests per operation.
+opentelemetry-instrumentation-fastapi==0.48b0

@@ -28,6 +28,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from agent.base import EVENTS
 from agent.mock_client import MockCortexClient
@@ -38,6 +39,11 @@ log = logging.getLogger("fieldops")
 
 tracer = trace.get_tracer("fieldops-copilot")
 app = FastAPI()
+# Auto-create the HTTP server span for every request, read inbound
+# W3C traceparent / Dynatrace headers as parent context. This lets the
+# OneAgent-captured nginx span stitch to our OTel spans, and makes
+# agent.run / tool.* spans children of the HTTP request, not roots.
+FastAPIInstrumentor().instrument_app(app)
 
 
 def _log(level: str, msg: str, **extra):
@@ -83,7 +89,10 @@ async def run(req: RunReq):
                 async for ev in _client().run([{"role": "user", "content": req.prompt}]):
                     if ev["event"] == EVENTS.TOOL_USE:
                         name = ev["data"].get("name")
-                        ts = tracer.start_span(f"tool.{name}", kind=SpanKind.SERVER)
+                        # INTERNAL (not SERVER): tool calls are child operations
+                        # of agent.run, not new entrypoints. SERVER would make
+                        # Dynatrace show them as separate top-level requests.
+                        ts = tracer.start_span(f"tool.{name}", kind=SpanKind.INTERNAL)
                         ts.set_attribute("gen_ai.system", "snowflake.cortex")
                         ts.set_attribute("gen_ai.operation.name", "execute_tool")
                         ts.set_attribute("gen_ai.tool.name", name)
