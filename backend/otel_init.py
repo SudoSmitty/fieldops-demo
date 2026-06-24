@@ -1,36 +1,55 @@
 """OTel bootstrap. Imported first by server.py.
 
-Sets up Traceloop with an OTLP HTTP exporter pointing at Dynatrace. This
-process is also under OneAgent's Python sensor (we intentionally do NOT
-exclude it per repo policy), and the two streams land in DIFFERENT tenants:
+Sets up Traceloop with an OTLP HTTP exporter pointing at Dynatrace for both
+TRACES and LOGS, and attaches an OTel LoggingHandler to Python's root logger
+so everything written by FastAPI, uvicorn (access + error), our app, and any
+library that uses `logging` ships to the same service entity as the spans.
 
-- OneAgent  -> Sprint tenant (infra, host, process, RUM, logs)
-- Traceloop -> Live tenant   (LLM / gen_ai spans for the AI Observability app)
-
-That separation avoids the classic OneAgent+OTel duplicate-service-entity
-symptom in a single tenant. In a real customer deployment with one tenant,
-either exclude the AI app PG from OneAgent codemodules, or accept that the
-service may surface twice in service detection.
+Tenant model: single-tenant by default (DT_OTLP_ENDPOINT and OneAgent point
+at the same Dynatrace env). Per repo policy the systemd unit also sets
+DT_INJECT=false on this process so OneAgent does NOT inject codemodules,
+leaving Traceloop/OTLP as the sole reporter for this AI service entity.
 """
 
+import logging
 import os
+
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.resources import Resource
+
 from traceloop.sdk import Traceloop
 
-DT_OTLP_ENDPOINT = os.environ.get("DT_OTLP_ENDPOINT")  # https://<env>.live.dynatrace.com/api/v2/otlp
+DT_OTLP_ENDPOINT = os.environ.get("DT_OTLP_ENDPOINT")  # https://<env>.dynatrace.com/api/v2/otlp
 DT_API_TOKEN = os.environ.get("DT_API_TOKEN")
 SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "fieldops-backend")
 
 if DT_OTLP_ENDPOINT and DT_API_TOKEN:
-    exporter = OTLPSpanExporter(
-        endpoint=f"{DT_OTLP_ENDPOINT.rstrip('/')}/v1/traces",
-        headers={"Authorization": f"Api-Token {DT_API_TOKEN}"},
-    )
-    Traceloop.init(
-        app_name=SERVICE_NAME,
-        exporter=exporter,
-        disable_batch=False,
-    )
+    base = DT_OTLP_ENDPOINT.rstrip("/")
+    headers = {"Authorization": f"Api-Token {DT_API_TOKEN}"}
+
+    # --- traces ---
+    span_exporter = OTLPSpanExporter(endpoint=f"{base}/v1/traces", headers=headers)
+    Traceloop.init(app_name=SERVICE_NAME, exporter=span_exporter, disable_batch=False)
+
+    # --- logs ---
+    # Use the same service.name so logs bind to the same dt.entity.service the
+    # spans are published under -> the AI Obs Logs tab populates.
+    log_resource = Resource.create({"service.name": SERVICE_NAME})
+    logger_provider = LoggerProvider(resource=log_resource)
+    set_logger_provider(logger_provider)
+    log_exporter = OTLPLogExporter(endpoint=f"{base}/v1/logs", headers=headers)
+    logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
+
+    # Attach an OTel handler to the ROOT logger so FastAPI, uvicorn.access,
+    # uvicorn.error, and our `fieldops` logger all flow to OTLP.
+    handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
+    root = logging.getLogger()
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
 else:
     # No-op tracer if OTLP env not configured (local dev / mock-only).
     Traceloop.init(app_name=SERVICE_NAME, disable_batch=False)

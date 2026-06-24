@@ -41,16 +41,12 @@ app = FastAPI()
 
 
 def _log(level: str, msg: str, **extra):
-    """Structured JSON log. Include current trace/span IDs so OneAgent's log
-    sensor (or any log search) can join logs to spans."""
-    span = trace.get_current_span()
-    ctx = span.get_span_context() if span else None
-    rec = {"level": level, "msg": msg}
-    if ctx and ctx.trace_id:
-        rec["trace.id"] = format(ctx.trace_id, "032x")
-        rec["span.id"] = format(ctx.span_id, "016x")
-    rec.update(extra)
-    log.info(json.dumps(rec))
+    """Structured log. Goes through the root logger so the OTel LoggingHandler
+    (configured in otel_init) ships it to Dynatrace via OTLP, where it lands
+    on the same dt.entity.service as the spans. Active trace/span context is
+    attached automatically by the OTel logging integration."""
+    fn = getattr(log, level, log.info)
+    fn(msg, extra={"attributes": extra} if extra else None)
 
 
 def _client():
