@@ -80,5 +80,9 @@ class MockCortexClient:
                 "tokens_in": sc["tokens"][0],
                 "tokens_out": sc["tokens"][1],
                 "tool": sc["tool"],
+                # Mirror Snowflake's behavior: the response advertises the model
+                # the agent actually used. server.py stamps this onto
+                # gen_ai.response.model, overriding the env default.
+                "model": "claude-3-5-sonnet",
             },
         }

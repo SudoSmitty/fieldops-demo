@@ -39,6 +39,11 @@ log = logging.getLogger("fieldops")
 
 tracer = trace.get_tracer("fieldops-copilot")
 app = FastAPI()
+# Default model identifier surfaced on spans. Overridable via env so the
+# operator can match whatever model their Snowflake Cortex agent is configured
+# to use. Real Snowflake mode also overrides gen_ai.response.model with the
+# value the Cortex response actually returns (see EVENTS.DONE branch below).
+CORTEX_MODEL_DEFAULT = os.environ.get("CORTEX_MODEL", "claude-3-5-sonnet")
 # Auto-create the HTTP server span for every request, read inbound
 # W3C traceparent / Dynatrace headers as parent context. This lets the
 # OneAgent-captured nginx span stitch to our OTel spans, and makes
@@ -91,8 +96,8 @@ async def run(req: RunReq):
             root.set_attribute("gen_ai.provider.name", "snowflake.cortex")
             root.set_attribute("gen_ai.operation.name", "chat")
             root.set_attribute("gen_ai.agent.name", "fieldops-supervisor")
-            root.set_attribute("gen_ai.request.model", "claude-4-sonnet")
-            root.set_attribute("gen_ai.response.model", "claude-4-sonnet")
+            root.set_attribute("gen_ai.request.model", CORTEX_MODEL_DEFAULT)
+            root.set_attribute("gen_ai.response.model", CORTEX_MODEL_DEFAULT)
             root.set_attribute("gen_ai.is_streaming", True)
             root.set_attribute("user.role", req.role)
             root.set_attribute("snowflake.request_id", request_id)
@@ -148,6 +153,12 @@ async def run(req: RunReq):
                     elif ev["event"] == EVENTS.DONE:
                         tokens_in = ev["data"].get("tokens_in") or 0
                         tokens_out = ev["data"].get("tokens_out") or 0
+                        # If the real Snowflake response carried the model it
+                        # actually used, override response.model with that. Mock
+                        # mode also yields `model` on DONE for parity.
+                        actual_model = ev["data"].get("model")
+                        if actual_model:
+                            root.set_attribute("gen_ai.response.model", actual_model)
                         root.set_attribute("gen_ai.usage.input_tokens", tokens_in)
                         root.set_attribute("gen_ai.usage.output_tokens", tokens_out)
                         root.set_attribute("gen_ai.usage.total_tokens", tokens_in + tokens_out)

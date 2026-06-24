@@ -48,6 +48,12 @@ def normalize(ev, data):
         if isinstance(u, dict):
             data["tokens_in"] = u.get("prompt_tokens") or u.get("input_tokens") or 0
             data["tokens_out"] = u.get("completion_tokens") or u.get("output_tokens") or 0
+        # Surface the actual model Snowflake used so server.py can override
+        # gen_ai.response.model on the span. Cortex puts this under varying
+        # keys depending on API revision; check both top-level and metadata.
+        model = data.get("model") or (data.get("metadata") or {}).get("model")
+        if model:
+            data["model"] = model
         return {"event": ev, "data": data}
 
     return {"event": ev, "data": data}
@@ -71,7 +77,12 @@ class SnowflakeCortexClient:
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
         }
-        body = {"model": "claude-4-sonnet", "messages": messages}
+        # If CORTEX_MODEL is set, pass it; otherwise let the agent's own
+        # configuration in Snowflake decide which model to use.
+        body = {"messages": messages}
+        cortex_model = os.environ.get("CORTEX_MODEL")
+        if cortex_model:
+            body["model"] = cortex_model
 
         timeout = httpx.Timeout(60.0, connect=10.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
