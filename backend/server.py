@@ -43,6 +43,11 @@ app = FastAPI()
 # W3C traceparent / Dynatrace headers as parent context. This lets the
 # OneAgent-captured nginx span stitch to our OTel spans, and makes
 # agent.run / tool.* spans children of the HTTP request, not roots.
+#
+# Note: the FastAPI/ASGI instrumentation also emits `<endpoint> http receive`
+# and `http send` INTERNAL sub-spans for each ASGI message. They're harmless
+# noise in the trace tree; no documented flag to suppress them on this version.
+# If they become a problem, drop them via a custom SpanProcessor filter.
 FastAPIInstrumentor().instrument_app(app)
 
 
@@ -50,9 +55,16 @@ def _log(level: str, msg: str, **extra):
     """Structured log. Goes through the root logger so the OTel LoggingHandler
     (configured in otel_init) ships it to Dynatrace via OTLP, where it lands
     on the same dt.entity.service as the spans. Active trace/span context is
-    attached automatically by the OTel logging integration."""
+    attached automatically by the OTel logging integration.
+
+    Extras are flattened into a JSON suffix on the message so they're queryable
+    in the log content without violating OTel attribute primitive-type rules
+    (OTel attributes can't be dicts)."""
     fn = getattr(log, level, log.info)
-    fn(msg, extra={"attributes": extra} if extra else None)
+    if extra:
+        fn(f"{msg} {json.dumps(extra)}")
+    else:
+        fn(msg)
 
 
 def _client():
