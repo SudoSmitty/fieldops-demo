@@ -4,8 +4,10 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>FieldOps Copilot</title>
-<!-- Dynatrace RUM tag (manual insertion fallback per plan Section 9.3 — OneAgent auto-injection unavailable for static-served HTML on this Sprint tenant). -->
-<script type="text/javascript" src="https://js-cdn.dynatracelabs.com/jstag/145e049b9b1/bf93289vpz/5771da1934c75bf6_complete.js" crossorigin="anonymous"></script>
+<!-- Dynatrace RUM tag (manual insertion — OneAgent auto-injection unavailable
+     for static-served HTML on this tenant). Replace the snippet URL when the
+     Web Application's tag is regenerated. -->
+<script type="text/javascript" src="https://js-cdn.dynatracelabs.com/jstag/145e049b9b1/bf93289vpz/f70db570c67b7ed1_complete.js" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Saira:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -169,9 +171,33 @@ const input = document.getElementById('q');
 const send  = document.getElementById('send');
 let role = 'technician';
 
+// --- RUM helpers ---
+// dtrum is injected by the Dynatrace RUM JS tag. Guard each call so the page
+// still works if the tag is blocked (ad blocker, offline simulator, etc.).
+function rumIdentify(r) {
+  try { window.dtrum && dtrum.identifyUser('fieldops-' + r); } catch (e) {}
+}
+function rumStartAction(name, props) {
+  try {
+    if (!window.dtrum) return null;
+    const h = dtrum.enterAction(name);
+    if (props) dtrum.addActionProperties(h, null, null, props);
+    return h;
+  } catch (e) { return null; }
+}
+function rumEndAction(h, ok) {
+  try {
+    if (!h) return;
+    if (ok === false) dtrum.markActionAsError(h);
+    dtrum.leaveAction(h);
+  } catch (e) {}
+}
+rumIdentify(role);   // initial identity
+
 document.getElementById('roles').addEventListener('click', e=>{
   const b = e.target.closest('.role'); if(!b) return;
   role = b.dataset.role;
+  rumIdentify(role);
   [...document.querySelectorAll('.role')].forEach(r=>
     r.setAttribute('aria-pressed', r===b));
 });
@@ -261,6 +287,12 @@ async function ask(){
   addUser(text);
   const ui = botTurn();
   ui.answer.appendChild(el('<span class="cursor"></span>'));
+  // Named RUM custom action -> queryable in user.events as useraction.name='agent.prompt'.
+  // Properties show as `string properties` on the action; we use them on the dashboard
+  // to break down AI usage by role and prompt category.
+  const promptKind = /\b(how|procedure|manual|maintenance|inspect)\b/i.test(text) ? 'knowledge' : 'data';
+  const action = rumStartAction('agent.prompt', { role, prompt_kind: promptKind });
+  let ok = true;
   try{
     const resp = await fetch('/api/agent/run',{method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -268,9 +300,11 @@ async function ask(){
     if(!resp.ok||!resp.body) throw new Error('backend');
     await readSSE(resp.body, ui);
   }catch(_){
+    ok = false;
     // Standalone preview fallback so the UI demos without the backend.
     await simulate(text, ui);
   }
+  rumEndAction(action, ok);
   const c=ui.answer.querySelector('.cursor'); if(c) c.remove();
   send.disabled=false; input.focus();
 }
