@@ -12,16 +12,22 @@ leaving Traceloop/OTLP as the sole reporter for this AI service entity.
 """
 
 import logging
-import os
+import sys
 
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry._logs import set_logger_provider
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk._logs.export import (
+    BatchLogRecordProcessor,
+    ConsoleLogExporter,
+    SimpleLogRecordProcessor,
+)
 from opentelemetry.sdk.resources import Resource
 
 from traceloop.sdk import Traceloop
+
+import os
 
 DT_OTLP_ENDPOINT = os.environ.get("DT_OTLP_ENDPOINT")  # https://<env>.dynatrace.com/api/v2/otlp
 DT_API_TOKEN = os.environ.get("DT_API_TOKEN")
@@ -43,12 +49,25 @@ if DT_OTLP_ENDPOINT and DT_API_TOKEN:
     set_logger_provider(logger_provider)
     log_exporter = OTLPLogExporter(endpoint=f"{base}/v1/logs", headers=headers)
     logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
+    # DEBUG: also dump each OTel log record to stderr (SimpleLogRecordProcessor
+    # exports immediately, no batching). Lets us verify the OTel logs pipeline
+    # is processing records even if the OTLP exporter is silently failing.
+    if os.environ.get("OTEL_LOG_DEBUG", "").lower() in ("1", "true", "yes"):
+        logger_provider.add_log_record_processor(
+            SimpleLogRecordProcessor(ConsoleLogExporter())
+        )
 
-    # Attach an OTel handler to the ROOT logger so FastAPI, uvicorn.access,
-    # uvicorn.error, and our `fieldops` logger all flow to OTLP.
-    handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
+    # Attach an OTel handler to the ROOT logger so FastAPI, uvicorn (access +
+    # error), and our `fieldops` logger all flow to OTLP.
+    otel_handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
     root = logging.getLogger()
-    root.addHandler(handler)
+    root.addHandler(otel_handler)
+    # Also keep a stream handler so logs remain visible in journald (defense
+    # in depth against silent OTLP failures, and for ssh-based debugging).
+    if not any(isinstance(h, logging.StreamHandler) and h is not otel_handler for h in root.handlers):
+        sh = logging.StreamHandler(stream=sys.stdout)
+        sh.setFormatter(logging.Formatter("%(name)s %(levelname)s %(message)s"))
+        root.addHandler(sh)
     root.setLevel(logging.INFO)
 else:
     # No-op tracer if OTLP env not configured (local dev / mock-only).
