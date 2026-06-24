@@ -69,18 +69,27 @@ async def run(req: RunReq):
     request_id = str(uuid.uuid4())
 
     async def event_stream() -> AsyncIterator[dict]:
-        # Root agent.run span — emits the canonical OTel GenAI semconv that
-        # Dynatrace AI Observability + Smartscape GenAI detection rely on.
+        # Root agent.run span — emits the canonical OTel GenAI semconv (v1.36+)
+        # that Dynatrace AI Observability + Smartscape GenAI detection rely on.
         with tracer.start_as_current_span("agent.run", kind=SpanKind.SERVER) as root:
             root.set_attribute("gen_ai.system", "snowflake.cortex")
+            root.set_attribute("gen_ai.provider.name", "snowflake.cortex")
             root.set_attribute("gen_ai.operation.name", "chat")
+            root.set_attribute("gen_ai.agent.name", "fieldops-supervisor")
             root.set_attribute("gen_ai.request.model", "claude-4-sonnet")
             root.set_attribute("gen_ai.response.model", "claude-4-sonnet")
+            root.set_attribute("gen_ai.is_streaming", True)
             root.set_attribute("user.role", req.role)
             root.set_attribute("snowflake.request_id", request_id)
+            # AI Obs "Prompt trace" panel reads the user prompt from this attribute
+            # in the current OTel GenAI semconv (v1.36+). The older span event format
+            # (`gen_ai.user.message`) is NOT what the panel renders.
+            root.set_attribute(
+                "gen_ai.input.messages",
+                json.dumps([{"role": "user", "parts": [{"content": req.prompt}]}]),
+            )
+            # Legacy attribute kept for dt-evals / existing DQL dashboards.
             root.set_attribute("gen_ai.prompt", req.prompt)
-            # OTel GenAI span event drives the AI Obs "Prompt trace" input column.
-            root.add_event("gen_ai.user.message", {"content": req.prompt, "role": "user"})
             _log("info", "agent request", request_id=request_id, role=req.role)
 
             open_tools = {}
@@ -117,19 +126,25 @@ async def run(req: RunReq):
                         completion += ev["data"].get("text", "")
 
                     elif ev["event"] == EVENTS.DONE:
-                        root.set_attribute("gen_ai.usage.input_tokens", ev["data"].get("tokens_in") or 0)
-                        root.set_attribute("gen_ai.usage.output_tokens", ev["data"].get("tokens_out") or 0)
+                        tokens_in = ev["data"].get("tokens_in") or 0
+                        tokens_out = ev["data"].get("tokens_out") or 0
+                        root.set_attribute("gen_ai.usage.input_tokens", tokens_in)
+                        root.set_attribute("gen_ai.usage.output_tokens", tokens_out)
+                        root.set_attribute("gen_ai.usage.total_tokens", tokens_in + tokens_out)
+                        root.set_attribute("gen_ai.response.id", request_id)
+                        root.set_attribute("gen_ai.response.finish_reasons", ["stop"])
+                        # AI Obs reads the assistant response from this attribute.
+                        root.set_attribute(
+                            "gen_ai.output.messages",
+                            json.dumps([{
+                                "role": "assistant",
+                                "parts": [{"content": completion}],
+                                "finish_reason": "stop",
+                            }]),
+                        )
+                        # Legacy attributes kept for dt-evals / existing DQL dashboards.
                         root.set_attribute("gen_ai.completion", completion)
                         root.set_attribute("gen_ai.response_id", request_id)
-                        # OTel GenAI span event drives the AI Obs "Prompt trace" output column.
-                        root.add_event(
-                            "gen_ai.choice",
-                            {
-                                "finish_reason": "stop",
-                                "index": 0,
-                                "message": json.dumps({"role": "assistant", "content": completion}),
-                            },
-                        )
 
                     elif ev["event"] == EVENTS.ERROR:
                         root.set_attribute("error", True)
