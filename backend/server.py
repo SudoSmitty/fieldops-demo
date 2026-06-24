@@ -71,7 +71,10 @@ async def run(req: RunReq):
     async def event_stream() -> AsyncIterator[dict]:
         # Root agent.run span — emits the canonical OTel GenAI semconv (v1.36+)
         # that Dynatrace AI Observability + Smartscape GenAI detection rely on.
-        with tracer.start_as_current_span("agent.run", kind=SpanKind.SERVER) as root:
+        # INTERNAL (not SERVER): agent.run is a logical operation INSIDE the
+        # HTTP request, not a separate request entry. The FastAPI auto-instrument
+        # already publishes the SERVER span for POST /api/agent/run.
+        with tracer.start_as_current_span("agent.run", kind=SpanKind.INTERNAL) as root:
             root.set_attribute("gen_ai.system", "snowflake.cortex")
             root.set_attribute("gen_ai.provider.name", "snowflake.cortex")
             root.set_attribute("gen_ai.operation.name", "chat")
@@ -83,10 +86,15 @@ async def run(req: RunReq):
             root.set_attribute("snowflake.request_id", request_id)
             # AI Obs "Prompt trace" panel reads the user prompt from this attribute
             # in the current OTel GenAI semconv (v1.36+). The older span event format
-            # (`gen_ai.user.message`) is NOT what the panel renders.
+            # (`gen_ai.user.message`) is NOT what the panel renders. The `type` on
+            # each part is REQUIRED for the panel to label the part properly
+            # (without it, the part renders as "Unknown").
             root.set_attribute(
                 "gen_ai.input.messages",
-                json.dumps([{"role": "user", "parts": [{"content": req.prompt}]}]),
+                json.dumps([{
+                    "role": "user",
+                    "parts": [{"type": "text", "content": req.prompt}],
+                }]),
             )
             # Legacy attribute kept for dt-evals / existing DQL dashboards.
             root.set_attribute("gen_ai.prompt", req.prompt)
@@ -138,7 +146,7 @@ async def run(req: RunReq):
                             "gen_ai.output.messages",
                             json.dumps([{
                                 "role": "assistant",
-                                "parts": [{"content": completion}],
+                                "parts": [{"type": "text", "content": completion}],
                                 "finish_reason": "stop",
                             }]),
                         )
