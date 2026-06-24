@@ -58,6 +58,13 @@ AGENT_MODE=mock
 OTEL_SERVICE_NAME=fieldops-backend
 DT_OTLP_ENDPOINT=${DT_OTLP_ENDPOINT}
 DT_API_TOKEN=${DT_API_TOKEN}
+# Opt this process OUT of OneAgent code-module injection. OneAgent stays
+# installed (host/Nginx/RUM/logs still flow); only the Python process is
+# left alone so Traceloop/OTLP is the sole reporter for the AI service
+# in the Dynatrace tenant. Without this, OneAgent's Python sensor and the
+# OTel SDK both publish the same process and you get a duplicate
+# fieldops-backend entry in the AI Observability app.
+DT_INJECT=false
 EOF
 chmod 600 /etc/fieldops/backend.env
 
