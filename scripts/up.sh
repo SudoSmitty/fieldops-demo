@@ -31,20 +31,29 @@ warn()   { printf '\033[1;33mWARN: %s\033[0m\n' "$*" >&2; }
 die()    { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
 banner "1. tokens"
+DEFAULT_OTLP="https://yuf3378h.live.dynatrace.com/api/v2/otlp"
+PAAS_TOKEN_URL="https://yuf3378h.sprint.apps.dynatracelabs.com/ui/apps/dynatrace.classic.tokens"
+API_TOKEN_URL="https://yuf3378h.live.apps.dynatrace.com/ui/apps/dynatrace.classic.tokens"
+
 if [ -z "${TF_VAR_dt_paas_token:-}" ]; then
-  read -rs -p 'Paste Dynatrace PaaS token (scope InstallerDownload, for OneAgent install): ' TF_VAR_dt_paas_token
+  echo "Generate at: $PAAS_TOKEN_URL  (scope: InstallerDownload)"
+  read -rs -p 'Paste Dynatrace PaaS token (Sprint, for OneAgent install): ' TF_VAR_dt_paas_token
   echo
   export TF_VAR_dt_paas_token
 fi
 [ -n "$TF_VAR_dt_paas_token" ] || die "no PaaS token"
+
 if [ -z "${DT_API_TOKEN:-}" ]; then
-  read -rs -p 'Paste Dynatrace API token (scope openTelemetryTrace.ingest, for AI Obs OTLP): ' DT_API_TOKEN
+  echo "Generate at: $API_TOKEN_URL  (scope: openTelemetryTrace.ingest)"
+  read -rs -p 'Paste Dynatrace API token (Live, for AI Obs OTLP): ' DT_API_TOKEN
   echo
   export DT_API_TOKEN
 fi
 [ -n "$DT_API_TOKEN" ] || die "no API token"
+
 if [ -z "${DT_OTLP_ENDPOINT:-}" ]; then
-  read -p 'OTLP tenant endpoint (e.g. https://yuf3378h.live.dynatrace.com/api/v2/otlp): ' DT_OTLP_ENDPOINT
+  read -p "OTLP tenant endpoint [$DEFAULT_OTLP]: " DT_OTLP_ENDPOINT
+  DT_OTLP_ENDPOINT="${DT_OTLP_ENDPOINT:-$DEFAULT_OTLP}"
   export DT_OTLP_ENDPOINT
 fi
 [ -n "$DT_OTLP_ENDPOINT" ] || die "no OTLP endpoint"
