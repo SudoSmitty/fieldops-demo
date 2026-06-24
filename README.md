@@ -93,29 +93,32 @@ See [.github/skills/dynatrace-oneagent-otel/SKILL.md](.github/skills/dynatrace-o
 
 Prereqs: `terraform`, `az` (logged in via `az login`), `ssh`, `curl`.
 
-Two Dynatrace tokens are needed (any not in env is prompted for at runtime — never written to disk):
+Tenant URLs + tokens can be supplied via env vars (any missing are prompted for at runtime — tokens are never written to disk):
 
-| Env var | Tenant | Scope |
-|---|---|---|
-| `TF_VAR_dt_paas_token` | Sprint (OneAgent install) | `InstallerDownload` |
-| `DT_API_TOKEN` | Live (OTLP ingest for AI Obs) | `openTelemetryTrace.ingest` |
-| `DT_OTLP_ENDPOINT` | Live | e.g. `https://yuf3378h.live.dynatrace.com/api/v2/otlp` |
+| Env var | Purpose |
+|---|---|
+| `DT_INFRA_URL` | Base URL of the tenant that gets OneAgent (e.g. `https://abc.live.dynatrace.com`) |
+| `DT_OTLP_ENDPOINT` | OTLP endpoint of the AI-Obs tenant (defaults to `$DT_INFRA_URL/api/v2/otlp` if unset → single-tenant deploy) |
+| `TF_VAR_dt_paas_token` | PaaS token on `DT_INFRA_URL`, scope `InstallerDownload` |
+| `DT_API_TOKEN` | API token on `DT_OTLP_ENDPOINT`, scope `openTelemetryTrace.ingest` |
+| `DT_DASHBOARD_ID` (optional) | Dashboard UUID to include in the final summary output |
+
+Single-tenant deployment (most common): set `DT_INFRA_URL` only, leave `DT_OTLP_ENDPOINT` to default. Split-tenant deployment: set both explicitly.
 
 ```bash
-export TF_VAR_dt_paas_token='dt0c01....'
-export DT_API_TOKEN='dt0c01....'
-export DT_OTLP_ENDPOINT='https://yuf3378h.live.dynatrace.com/api/v2/otlp'
 ./scripts/up.sh
+# answer the prompts (token-generation URLs are shown above each prompt)
 ```
 
 What [scripts/up.sh](scripts/up.sh) does:
-1. Verifies prereqs, Azure login, and that both tokens are present.
-2. Generates `~/.ssh/fieldops_rsa` if missing (azurerm rejects ed25519).
-3. Auto-syncs your current public IP into `infra/terraform.tfvars`.
-4. `terraform apply` — creates RG, VNet, NSG, public IP, VM.
-5. SSHes in and runs [scripts/deploy.sh](scripts/deploy.sh) — installs OneAgent, Python 3.11, Nginx, clones the app, builds a venv, writes `/etc/fieldops/backend.env` with the OTLP creds, starts the systemd service. Idempotent.
-6. Smoke test: confirms 200 on the frontend and an SSE stream from the backend.
-7. Prints the URL, SSH command, and dashboard link.
+1. Prompts / verifies tenant URLs and tokens; derives the apps-UI URLs.
+2. Verifies prereqs and Azure login.
+3. Generates `~/.ssh/fieldops_rsa` if missing (azurerm rejects ed25519).
+4. Auto-syncs your current public IP into `infra/terraform.tfvars`.
+5. `terraform apply` — creates RG, VNet, NSG, public IP, VM.
+6. SSHes in and runs [scripts/deploy.sh](scripts/deploy.sh) — installs OneAgent (pointed at `DT_INFRA_URL`), Python 3.11, Nginx, clones the app, builds a venv, writes `/etc/fieldops/backend.env` with the OTLP creds, starts the systemd service. Idempotent.
+7. Smoke test: confirms 200 on the frontend and an SSE stream from the backend.
+8. Prints the URL, SSH command, and AI Obs app link.
 
 Total time: ~5 minutes.
 

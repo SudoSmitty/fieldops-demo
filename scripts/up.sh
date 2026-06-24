@@ -2,23 +2,23 @@
 # scripts/up.sh — bring up the FieldOps demo end-to-end.
 #
 # Usage:
-#   export TF_VAR_dt_paas_token='dt0c01....'   # PaaS token (InstallerDownload)
-#   export DT_API_TOKEN='dt0c01....'           # API token (openTelemetryTrace.ingest)
-#   export DT_OTLP_ENDPOINT='https://<env>.live.dynatrace.com/api/v2/otlp'
+#   export DT_INFRA_URL='https://<env>.<seg>.dynatrace.com'   # OneAgent install tenant
+#   export DT_OTLP_ENDPOINT='https://<env>.<seg>.dynatrace.com/api/v2/otlp'  # AI Obs tenant
+#   export TF_VAR_dt_paas_token='dt0c01....'   # PaaS token on DT_INFRA_URL (InstallerDownload)
+#   export DT_API_TOKEN='dt0c01....'           # API token on DT_OTLP_ENDPOINT (openTelemetryTrace.ingest)
 #   ./scripts/up.sh
 #
-# (Any token not in env is prompted for at runtime — never written to disk.)
+# (Anything not in env is prompted for at runtime. Tokens never land on disk.)
+# Single-tenant deployments: set DT_INFRA_URL and DT_OTLP_ENDPOINT to the same tenant.
 #
 # What this does (idempotent — safe to re-run):
-#   1. Verify prereqs (terraform, az, ssh-keygen, ssh, curl)
-#   2. Generate ~/.ssh/fieldops_rsa if missing (azurerm rejects ed25519)
-#   3. Refresh allowed_ip in terraform.tfvars to your current public IP
-#   4. terraform apply  (creates RG, VNet, NSG, public IP, VM)
-#   5. SSH to the VM and run scripts/deploy.sh (installs OneAgent, Python, Nginx, app)
-#   6. Smoke test: curl the public URL, confirm SSE event stream
-#
-# Token security: tokens are only ever set in your shell env.
-# They never land in tfvars, never on disk, never in chat.
+#   1. Prompt / verify tenant URLs and tokens
+#   2. Verify prereqs (terraform, az, ssh-keygen, ssh, curl)
+#   3. Generate ~/.ssh/fieldops_rsa if missing (azurerm rejects ed25519)
+#   4. Refresh allowed_ip in terraform.tfvars to your current public IP
+#   5. terraform apply  (creates RG, VNet, NSG, public IP, VM)
+#   6. SSH to the VM and run scripts/deploy.sh (installs OneAgent, Python, Nginx, app)
+#   7. Smoke test: curl the public URL, confirm SSE event stream
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,34 +30,54 @@ banner() { printf '\n\033[1;36m== %s ==\033[0m\n' "$*"; }
 warn()   { printf '\033[1;33mWARN: %s\033[0m\n' "$*" >&2; }
 die()    { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
-banner "1. tokens"
-DEFAULT_OTLP="https://yuf3378h.live.dynatrace.com/api/v2/otlp"
-PAAS_TOKEN_URL="https://yuf3378h.sprint.apps.dynatracelabs.com/ui/apps/dynatrace.classic.tokens"
-API_TOKEN_URL="https://yuf3378h.live.apps.dynatrace.com/ui/apps/dynatrace.classic.tokens"
+# Derive the "apps" UI URL from a base tenant URL.
+# Examples:
+#   https://abc.live.dynatrace.com         -> https://abc.live.apps.dynatrace.com
+#   https://abc.sprint.dynatracelabs.com   -> https://abc.sprint.apps.dynatracelabs.com
+apps_url_of() {
+  printf '%s' "$1" | sed -E 's|\.(dynatrace(labs)?\.com)$|.apps.\1|'
+}
+
+banner "1. tenant + tokens"
+
+if [ -z "${DT_INFRA_URL:-}" ]; then
+  echo "Tenant URL used for OneAgent install on the VM (host/process/RUM/logs)."
+  read -p 'Dynatrace infra tenant URL (e.g. https://abc.live.dynatrace.com): ' DT_INFRA_URL
+  export DT_INFRA_URL
+fi
+[ -n "$DT_INFRA_URL" ] || die "no DT_INFRA_URL"
+DT_INFRA_URL="${DT_INFRA_URL%/}"   # strip trailing slash
+
+if [ -z "${DT_OTLP_ENDPOINT:-}" ]; then
+  DEFAULT_OTLP="${DT_INFRA_URL}/api/v2/otlp"
+  echo "Tenant OTLP endpoint where the AI Observability app will surface prompts."
+  echo "Use the same tenant as infra unless intentionally splitting."
+  read -p "OTLP endpoint [$DEFAULT_OTLP]: " DT_OTLP_ENDPOINT
+  DT_OTLP_ENDPOINT="${DT_OTLP_ENDPOINT:-$DEFAULT_OTLP}"
+  export DT_OTLP_ENDPOINT
+fi
+[ -n "$DT_OTLP_ENDPOINT" ] || die "no DT_OTLP_ENDPOINT"
+
+INFRA_APPS_URL="$(apps_url_of "$DT_INFRA_URL")"
+OTLP_BASE="${DT_OTLP_ENDPOINT%/api/v2/otlp}"
+OTLP_APPS_URL="$(apps_url_of "$OTLP_BASE")"
 
 if [ -z "${TF_VAR_dt_paas_token:-}" ]; then
-  echo "Generate at: $PAAS_TOKEN_URL  (scope: InstallerDownload)"
-  read -rs -p 'Paste Dynatrace PaaS token (Sprint, for OneAgent install): ' TF_VAR_dt_paas_token
+  echo "Generate at: ${INFRA_APPS_URL}/ui/apps/dynatrace.classic.tokens  (scope: InstallerDownload)"
+  read -rs -p 'Paste PaaS token for the infra tenant: ' TF_VAR_dt_paas_token
   echo
   export TF_VAR_dt_paas_token
 fi
 [ -n "$TF_VAR_dt_paas_token" ] || die "no PaaS token"
 
 if [ -z "${DT_API_TOKEN:-}" ]; then
-  echo "Generate at: $API_TOKEN_URL  (scope: openTelemetryTrace.ingest)"
-  read -rs -p 'Paste Dynatrace API token (Live, for AI Obs OTLP): ' DT_API_TOKEN
+  echo "Generate at: ${OTLP_APPS_URL}/ui/apps/dynatrace.classic.tokens  (scope: openTelemetryTrace.ingest)"
+  read -rs -p 'Paste API token for the OTLP tenant: ' DT_API_TOKEN
   echo
   export DT_API_TOKEN
 fi
 [ -n "$DT_API_TOKEN" ] || die "no API token"
-
-if [ -z "${DT_OTLP_ENDPOINT:-}" ]; then
-  read -p "OTLP tenant endpoint [$DEFAULT_OTLP]: " DT_OTLP_ENDPOINT
-  DT_OTLP_ENDPOINT="${DT_OTLP_ENDPOINT:-$DEFAULT_OTLP}"
-  export DT_OTLP_ENDPOINT
-fi
-[ -n "$DT_OTLP_ENDPOINT" ] || die "no OTLP endpoint"
-echo "tokens + OTLP endpoint set in env"
+echo "tenant + tokens set in env"
 
 banner "2. prereqs"
 for bin in terraform az ssh-keygen ssh curl; do
@@ -105,7 +125,7 @@ echo " ssh up"
 
 banner "7. run deploy.sh on VM"
 ssh -i "$KEY" azureuser@"$PUBIP" \
-    "sudo DT_URL='https://yuf3378h.sprint.dynatracelabs.com' \
+    "sudo DT_URL='$DT_INFRA_URL' \
           DT_TOKEN='$TF_VAR_dt_paas_token' \
           DT_OTLP_ENDPOINT='$DT_OTLP_ENDPOINT' \
           DT_API_TOKEN='$DT_API_TOKEN' \
@@ -125,10 +145,14 @@ EVENTS="$(curl -sS -N -X POST "http://$PUBIP/api/agent/run" \
 echo "SSE stream: $EVENTS events"
 
 banner "done"
+DASHBOARD_LINE=""
+if [ -n "${DT_DASHBOARD_ID:-}" ]; then
+  DASHBOARD_LINE="  Dashboard:  ${INFRA_APPS_URL}/ui/apps/dynatrace.dashboards/dashboard/${DT_DASHBOARD_ID}"$'\n'
+fi
 cat <<EOF
   URL:        $URL
   SSH:        ssh -i $KEY azureuser@$PUBIP
-  Dashboard:  https://yuf3378h.sprint.apps.dynatracelabs.com/ui/apps/dynatrace.dashboards/dashboard/7105baa7-5608-465e-874e-69c1ae0781e2
-
+  AI Obs:     ${OTLP_APPS_URL}/ui/apps/dynatrace.genai.observability
+${DASHBOARD_LINE}
   Cost meter is running (~\$0.05/hr). When done:  ./scripts/down.sh
 EOF
