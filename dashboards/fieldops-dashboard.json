@@ -274,6 +274,22 @@
           }
         },
         "querySettings": {}
+      },
+      "17": {
+        "type": "markdown",
+        "content": "## Agent & Service Health\n\nWhat the Python FastAPI backend is doing for each user request: agent invocations, end-to-end answer latency, FastAPI HTTP latency, token throughput, and per-tool breakdown. Scoped to `dt.service.name == \"fieldops-backend\"`."
+      },
+      "18": {
+        "type": "markdown",
+        "content": "## Infrastructure\n\nThe Azure VM hosting the FieldOps backend \u2014 OneAgent fullstack metrics (host-level only; Python process group has deep monitoring disabled by design)."
+      },
+      "19": {
+        "type": "markdown",
+        "content": "## Conversations\n\nThe actual prompts and completions for every agent run \u2014 sourced from the `gen_ai.*` attributes on the `agent.run` span (also fed to the Dynatrace AI Observability app and to dt-evals)."
+      },
+      "20": {
+        "type": "markdown",
+        "content": "## Logs\n\nApplication logs from FastAPI, uvicorn, and our `_log()` helper, shipped via OTLP and bound to the same `dt.entity.service` as the spans (filter on `service.name == \"fieldops-backend\"`)."
       }
     },
     "layouts": {
@@ -285,15 +301,19 @@
       "13": { "x": 8,  "y": 11, "w": 16, "h": 8 },
       "15": { "x": 0,  "y": 19, "w": 12, "h": 8 },
       "16": { "x": 12, "y": 19, "w": 12, "h": 8 },
-      "1":  { "x": 0,  "y": 27, "w": 12, "h": 8 },
-      "2":  { "x": 12, "y": 27, "w": 12, "h": 8 },
-      "8":  { "x": 0,  "y": 35, "w": 12, "h": 8 },
-      "9":  { "x": 12, "y": 35, "w": 12, "h": 8 },
-      "3":  { "x": 0,  "y": 43, "w": 12, "h": 8 },
-      "4":  { "x": 12, "y": 43, "w": 12, "h": 8 },
-      "5":  { "x": 0,  "y": 51, "w": 24, "h": 6 },
-      "6":  { "x": 0,  "y": 57, "w": 24, "h": 14 },
-      "7":  { "x": 0,  "y": 71, "w": 24, "h": 8 }
+      "17": { "x": 0,  "y": 27, "w": 24, "h": 2 },
+      "1":  { "x": 0,  "y": 29, "w": 12, "h": 8 },
+      "2":  { "x": 12, "y": 29, "w": 12, "h": 8 },
+      "8":  { "x": 0,  "y": 37, "w": 12, "h": 8 },
+      "9":  { "x": 12, "y": 37, "w": 12, "h": 8 },
+      "3":  { "x": 0,  "y": 45, "w": 12, "h": 8 },
+      "4":  { "x": 12, "y": 45, "w": 12, "h": 8 },
+      "18": { "x": 0,  "y": 53, "w": 24, "h": 2 },
+      "5":  { "x": 0,  "y": 55, "w": 24, "h": 6 },
+      "19": { "x": 0,  "y": 61, "w": 24, "h": 2 },
+      "6":  { "x": 0,  "y": 63, "w": 24, "h": 14 },
+      "20": { "x": 0,  "y": 77, "w": 24, "h": 2 },
+      "7":  { "x": 0,  "y": 79, "w": 24, "h": 8 }
     },
     "settings": {
       "gridLayout": { "columnsCount": 24 }
