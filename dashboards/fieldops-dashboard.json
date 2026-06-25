@@ -259,12 +259,12 @@
       "16": {
         "type": "data",
         "title": "Recent AI invocations (per browser session)",
-        "query": "fetch user.events, from:-1h | filter dt.rum.user_type == \"real_user\" and page.title == \"FieldOps Copilot\" and url.path == \"/api/agent/run\" | sort timestamp desc | fields timestamp, dt.rum.browser.session_id, geo.country.iso_code, browser.name, http.response.status_code, duration | limit 30",
+        "query": "fetch user.events, from:-1h | filter dt.rum.user_type == \"real_user\" and page.title == \"FieldOps Copilot\" and url.path == \"/api/agent/run\" | sort start_time desc | fields start_time, dt.rum.browser.session_id, geo.country.iso_code, browser.name, http.response.status_code, duration | limit 30",
         "visualization": "table",
         "visualizationSettings": {
           "table": {
             "colorThresholdTarget": "value",
-            "columnOrder": ["timestamp", "dt.rum.browser.session_id", "geo.country.iso_code", "browser.name", "http.response.status_code", "duration"],
+            "columnOrder": ["start_time", "dt.rum.browser.session_id", "geo.country.iso_code", "browser.name", "http.response.status_code", "duration"],
             "hiddenColumns": [],
             "rowDensity": "condensed",
             "sortBy": [],
@@ -278,22 +278,22 @@
     },
     "layouts": {
       "0":  { "x": 0,  "y": 0,  "w": 24, "h": 1 },
-      "1":  { "x": 0,  "y": 1,  "w": 12, "h": 8 },
-      "2":  { "x": 12, "y": 1,  "w": 12, "h": 8 },
-      "8":  { "x": 0,  "y": 9,  "w": 12, "h": 8 },
-      "9":  { "x": 12, "y": 9,  "w": 12, "h": 8 },
-      "3":  { "x": 0,  "y": 17, "w": 12, "h": 8 },
-      "4":  { "x": 12, "y": 17, "w": 12, "h": 8 },
-      "5":  { "x": 0,  "y": 25, "w": 24, "h": 6 },
-      "6":  { "x": 0,  "y": 31, "w": 24, "h": 14 },
-      "7":  { "x": 0,  "y": 45, "w": 24, "h": 8 },
-      "10": { "x": 0,  "y": 53, "w": 24, "h": 2 },
-      "11": { "x": 0,  "y": 55, "w": 12, "h": 8 },
-      "12": { "x": 12, "y": 55, "w": 12, "h": 8 },
-      "14": { "x": 0,  "y": 63, "w": 8,  "h": 8 },
-      "13": { "x": 8,  "y": 63, "w": 16, "h": 8 },
-      "15": { "x": 0,  "y": 71, "w": 12, "h": 8 },
-      "16": { "x": 12, "y": 71, "w": 12, "h": 8 }
+      "10": { "x": 0,  "y": 1,  "w": 24, "h": 2 },
+      "11": { "x": 0,  "y": 3,  "w": 12, "h": 8 },
+      "12": { "x": 12, "y": 3,  "w": 12, "h": 8 },
+      "14": { "x": 0,  "y": 11, "w": 8,  "h": 8 },
+      "13": { "x": 8,  "y": 11, "w": 16, "h": 8 },
+      "15": { "x": 0,  "y": 19, "w": 12, "h": 8 },
+      "16": { "x": 12, "y": 19, "w": 12, "h": 8 },
+      "1":  { "x": 0,  "y": 27, "w": 12, "h": 8 },
+      "2":  { "x": 12, "y": 27, "w": 12, "h": 8 },
+      "8":  { "x": 0,  "y": 35, "w": 12, "h": 8 },
+      "9":  { "x": 12, "y": 35, "w": 12, "h": 8 },
+      "3":  { "x": 0,  "y": 43, "w": 12, "h": 8 },
+      "4":  { "x": 12, "y": 43, "w": 12, "h": 8 },
+      "5":  { "x": 0,  "y": 51, "w": 24, "h": 6 },
+      "6":  { "x": 0,  "y": 57, "w": 24, "h": 14 },
+      "7":  { "x": 0,  "y": 71, "w": 24, "h": 8 }
     },
     "settings": {
       "gridLayout": { "columnsCount": 24 }
