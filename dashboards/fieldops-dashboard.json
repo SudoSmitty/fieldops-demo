@@ -8,7 +8,7 @@
     "tiles": {
       "0": {
         "type": "markdown",
-        "content": "# FieldOps Cortex Agent — Observability\n\nSplit-stack telemetry for a Python FastAPI agent calling Snowflake Cortex Agents:\n\n- **OneAgent** ships host / Nginx / RUM / logs to this tenant.\n- **OpenLLMetry (Traceloop) → OTLP** ships `gen_ai.*` spans for the AI Observability app and this dashboard.\n\nAll span queries below are scoped to `dt.service.name == \"fieldops-backend\"` (the OTLP-published service entity). Use the time-picker (top right) to adjust the window."
+        "content": "# FieldOps Cortex Agent — Observability\n\nSplit-stack telemetry for a Python FastAPI agent calling Snowflake Cortex Agents:\n\n- **OneAgent** ships host / Nginx / RUM / logs to this tenant.\n- **OpenLLMetry (Traceloop) → OTLP** ships `gen_ai.*` spans for the AI Observability app and this dashboard.\n\nSpan queries are scoped to `dt.service.name == \"fieldops-backend\"` (OTLP service entity). RUM queries are scoped to `page.title == \"FieldOps Copilot\"` + `dt.rum.user_type == \"real_user\"` (works for both the auto-detected and assigned application entities)."
       },
       "1": {
         "type": "data",
@@ -169,19 +169,131 @@
           "colorModeType": { "colorPalette": "categorical", "seriesCustomColors": [] }
         },
         "querySettings": {}
+      },
+      "10": {
+        "type": "markdown",
+        "content": "## Business & User Impact (RUM)\n\nWhat real users are doing in the SPA — adoption, engagement with the AI feature, and frontend performance. Built from `user.events` (`dt.rum.user_type == \"real_user\"`, scoped to the FieldOps Copilot page)."
+      },
+      "11": {
+        "type": "data",
+        "title": "Active users (distinct browser sessions over time)",
+        "query": "fetch user.events | filter dt.rum.user_type == \"real_user\" and page.title == \"FieldOps Copilot\" | makeTimeseries active = countDistinct(dt.rum.browser.session_id)",
+        "visualization": "lineChart",
+        "visualizationSettings": {
+          "dataMapping": { "time": "timeframe", "displayedFields": [], "series": ["active"], "interval": "interval" },
+          "axes": {
+            "xAxis": { "label": "", "showLabel": false, "displayTimeFrame": "auto" },
+            "yAxis": { "label": "sessions", "min": {"mode": "auto"}, "max": {"mode": "auto"}, "scale": "linear", "showLabel": true }
+          },
+          "seriesConfig": { "curve": "linear", "pointsDisplay": "auto", "gapPolicy": "gap" },
+          "colorModeType": { "colorPalette": "categorical", "seriesCustomColors": [] }
+        },
+        "querySettings": {}
+      },
+      "12": {
+        "type": "data",
+        "title": "AI invocations per minute (XHR /api/agent/run)",
+        "query": "fetch user.events | filter dt.rum.user_type == \"real_user\" and page.title == \"FieldOps Copilot\" and url.path == \"/api/agent/run\" | makeTimeseries invocations = count()",
+        "visualization": "lineChart",
+        "visualizationSettings": {
+          "dataMapping": { "time": "timeframe", "displayedFields": [], "series": ["invocations"], "interval": "interval" },
+          "axes": {
+            "xAxis": { "label": "", "showLabel": false, "displayTimeFrame": "auto" },
+            "yAxis": { "label": "invocations", "min": {"mode": "auto"}, "max": {"mode": "auto"}, "scale": "linear", "showLabel": true }
+          },
+          "seriesConfig": { "curve": "linear", "pointsDisplay": "auto", "gapPolicy": "gap" },
+          "colorModeType": { "colorPalette": "categorical", "seriesCustomColors": [] }
+        },
+        "querySettings": {}
+      },
+      "13": {
+        "type": "data",
+        "title": "AI engagement — prompts per session (top 10)",
+        "query": "fetch user.events, from:-1h | filter dt.rum.user_type == \"real_user\" and page.title == \"FieldOps Copilot\" and url.path == \"/api/agent/run\" | summarize prompts = count(), by:{session = dt.rum.browser.session_id} | sort prompts desc | limit 10",
+        "visualization": "categoricalBarChart",
+        "visualizationSettings": {
+          "categoryAxis": { "label": {"label": "session", "showLabel": true}, "tickLayout": "horizontal" },
+          "numericAxis": { "label": {"showLabel": true, "label": "prompts"}, "scale": "linear" },
+          "dataMapping": { "displayedFields": ["session"], "values": ["prompts"] },
+          "valueSettings": { "valueRepresentation": "absolute" },
+          "layout": { "groupMode": "grouped", "position": "horizontal" },
+          "colorModeType": { "colorCategoryMode": "single-color", "colorPalette": "categorical", "customCategoryColors": {} }
+        },
+        "querySettings": {}
+      },
+      "14": {
+        "type": "data",
+        "title": "AI adoption — sessions that invoked the AI",
+        "query": "fetch user.events, from:-1h | filter dt.rum.user_type == \"real_user\" and page.title == \"FieldOps Copilot\" | summarize total_sessions = countDistinct(dt.rum.browser.session_id), ai_sessions = countDistinct(if(url.path == \"/api/agent/run\", dt.rum.browser.session_id))",
+        "visualization": "singleValue",
+        "visualizationSettings": {
+          "singleValue": {
+            "showLabel": true,
+            "label": "AI sessions / Total",
+            "prefixIcon": "",
+            "autoscale": true,
+            "alignment": "center",
+            "colorThresholdTarget": "value",
+            "trend": { "trendType": "auto", "isVisible": false },
+            "sparklineSettings": { "isVisible": false, "color": { "Default": "DEFAULT_DARK" } }
+          }
+        },
+        "querySettings": {}
+      },
+      "15": {
+        "type": "data",
+        "title": "Page-load performance — First Contentful Paint (FCP)",
+        "query": "fetch user.events | filter dt.rum.user_type == \"real_user\" and page.title == \"FieldOps Copilot\" and isNotNull(fcp.value) | makeTimeseries {p50 = percentile(fcp.value, 50), p90 = percentile(fcp.value, 90)}",
+        "visualization": "lineChart",
+        "visualizationSettings": {
+          "dataMapping": { "time": "timeframe", "displayedFields": [], "series": ["p50", "p90"], "interval": "interval" },
+          "axes": {
+            "xAxis": { "label": "", "showLabel": false, "displayTimeFrame": "auto" },
+            "yAxis": { "label": "FCP (ms)", "min": {"mode": "auto"}, "max": {"mode": "auto"}, "scale": "linear", "showLabel": true }
+          },
+          "seriesConfig": { "curve": "linear", "pointsDisplay": "auto", "gapPolicy": "gap" },
+          "colorModeType": { "colorPalette": "categorical", "seriesCustomColors": [] }
+        },
+        "querySettings": {}
+      },
+      "16": {
+        "type": "data",
+        "title": "Recent AI invocations (per browser session)",
+        "query": "fetch user.events, from:-1h | filter dt.rum.user_type == \"real_user\" and page.title == \"FieldOps Copilot\" and url.path == \"/api/agent/run\" | sort timestamp desc | fields timestamp, dt.rum.browser.session_id, geo.country.iso_code, browser.name, http.response.status_code, duration | limit 30",
+        "visualization": "table",
+        "visualizationSettings": {
+          "table": {
+            "colorThresholdTarget": "value",
+            "columnOrder": ["timestamp", "dt.rum.browser.session_id", "geo.country.iso_code", "browser.name", "http.response.status_code", "duration"],
+            "hiddenColumns": [],
+            "rowDensity": "condensed",
+            "sortBy": [],
+            "columnWidthStrategy": "auto",
+            "enableSparklines": false,
+            "linewrapEnabled": true
+          }
+        },
+        "querySettings": {}
       }
     },
     "layouts": {
-      "0": { "x": 0,  "y": 0,  "w": 24, "h": 1 },
-      "1": { "x": 0,  "y": 1,  "w": 12, "h": 8 },
-      "2": { "x": 12, "y": 1,  "w": 12, "h": 8 },
-      "8": { "x": 0,  "y": 9,  "w": 12, "h": 8 },
-      "9": { "x": 12, "y": 9,  "w": 12, "h": 8 },
-      "3": { "x": 0,  "y": 17, "w": 12, "h": 8 },
-      "4": { "x": 12, "y": 17, "w": 12, "h": 8 },
-      "5": { "x": 0,  "y": 25, "w": 24, "h": 6 },
-      "6": { "x": 0,  "y": 31, "w": 24, "h": 14 },
-      "7": { "x": 0,  "y": 45, "w": 24, "h": 8 }
+      "0":  { "x": 0,  "y": 0,  "w": 24, "h": 1 },
+      "1":  { "x": 0,  "y": 1,  "w": 12, "h": 8 },
+      "2":  { "x": 12, "y": 1,  "w": 12, "h": 8 },
+      "8":  { "x": 0,  "y": 9,  "w": 12, "h": 8 },
+      "9":  { "x": 12, "y": 9,  "w": 12, "h": 8 },
+      "3":  { "x": 0,  "y": 17, "w": 12, "h": 8 },
+      "4":  { "x": 12, "y": 17, "w": 12, "h": 8 },
+      "5":  { "x": 0,  "y": 25, "w": 24, "h": 6 },
+      "6":  { "x": 0,  "y": 31, "w": 24, "h": 14 },
+      "7":  { "x": 0,  "y": 45, "w": 24, "h": 8 },
+      "10": { "x": 0,  "y": 53, "w": 24, "h": 2 },
+      "11": { "x": 0,  "y": 55, "w": 12, "h": 8 },
+      "12": { "x": 12, "y": 55, "w": 12, "h": 8 },
+      "14": { "x": 0,  "y": 63, "w": 8,  "h": 8 },
+      "13": { "x": 8,  "y": 63, "w": 16, "h": 8 },
+      "15": { "x": 0,  "y": 71, "w": 12, "h": 8 },
+      "16": { "x": 12, "y": 71, "w": 12, "h": 8 }
     },
     "settings": {
       "gridLayout": { "columnsCount": 24 }
